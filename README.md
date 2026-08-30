@@ -53,3 +53,8 @@ con l'URL reale del Worker, per esempio:
 `https://lightning-wind-pong-multiplayer.nomeaccount.workers.dev`
 
 Poi carica/aggiorna i file del frontend su GitHub Pages.
+
+
+## V5.1
+- Worker name aligned to Cloudflare project: `lightning-wind-pong`
+- Multiplayer URL already configured: `https://lightning-wind-pong.vocidicassino.workers.dev`
