@@ -1,41 +1,97 @@
 <!doctype html>
 <html lang="it">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#020713">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<title>Lightning vs Wind Pong</title>
-<style>
-:root{color-scheme:dark;--bg:#020713;--cyan:#28d9ff;--white:#eef7ff}*{box-sizing:border-box}html,body{margin:0;width:100%;min-height:100%;background:radial-gradient(circle at 15% 18%,rgba(0,164,255,.13),transparent 30%),radial-gradient(circle at 85% 35%,rgba(255,255,255,.07),transparent 28%),linear-gradient(180deg,#06111f,#020713 66%);font-family:Inter,system-ui,sans-serif;color:var(--white);overscroll-behavior:none}body{min-height:100dvh;padding:max(7px,env(safe-area-inset-top)) max(7px,env(safe-area-inset-right)) max(7px,env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left))}.app{width:min(760px,100%);margin:auto}.top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.eyebrow{margin:0;color:#8bb3cd;font-size:.65rem;font-weight:900;letter-spacing:.25em}.title{margin:4px 0 10px;font-size:clamp(1.25rem,6vw,2.25rem);letter-spacing:.13em;line-height:1.03}.title span{color:#8095a7;font-size:.72em}.actions{display:grid;grid-template-columns:repeat(2,44px);gap:7px}.icon{width:44px;height:44px;border:1px solid rgba(160,220,255,.24);border-radius:13px;background:#09182be0;color:white;font-size:1.05rem}.install-hidden{display:none!important}.scores{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:6px;margin-bottom:8px}.card,.vs{min-height:76px;border:1px solid rgba(120,210,255,.17);background:#05101dbd;border-radius:16px;display:flex;align-items:center;justify-content:center;padding:7px}.card{gap:4px}.card span{font-weight:900;font-size:clamp(.55rem,2.6vw,.78rem)}.card b{font-size:clamp(2rem,9vw,3.1rem)}.left b{color:var(--cyan);text-shadow:0 0 18px #28d9ffaa}.right b{text-shadow:0 0 18px #ffffff88}.vs{flex-direction:column;text-align:center}.vs strong{font-size:1.45rem;letter-spacing:.14em}.vs small{margin-top:4px;color:#8ba2b4;font-weight:800;font-size:.62rem;letter-spacing:.06em}.arena{position:relative;border-radius:24px;padding:3px;background:linear-gradient(145deg,#30e3ff,#1b789355 46%,#ffffffc0);box-shadow:0 0 36px #14c6ff22;overflow:hidden}canvas{display:block;width:100%;height:auto;aspect-ratio:3/4;max-height:61dvh;border-radius:21px;background:#020918;touch-action:none}.overlay{position:absolute;inset:3px;display:none;align-items:center;justify-content:center;padding:12px;border-radius:21px;background:#0107118f;backdrop-filter:blur(9px);z-index:10}.overlay.show{display:flex}.panel{width:min(590px,95%);border:1px solid rgba(140,220,255,.22);background:linear-gradient(#08192df5,#030a16f5);border-radius:21px;padding:18px;text-align:center}.panel h2{margin:5px 0 8px;font-size:clamp(1.5rem,6vw,2.5rem);letter-spacing:.08em}.panel p{color:#9db3c3;font-size:.82rem}.modes{display:grid;grid-template-columns:1fr 1fr;gap:8px}.btn{border:1px solid rgba(166,225,255,.22);background:#08172aee;color:white;border-radius:14px;padding:12px 8px;font-weight:800;cursor:pointer}.btn.primary{border-color:#28d9ffaa;background:linear-gradient(#0aa9d43d,#071b30f5)}.difficulty{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:10px}.difficulty button,.audioRow button{border:1px solid rgba(140,210,245,.16);background:#071526;color:#9db4c4;border-radius:10px;padding:8px}.difficulty .active,.audioRow .active{color:white;border-color:#28d9ff77;background:#0e5a7345}.audioRow{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.bottom{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.chip{border:1px solid rgba(120,210,255,.15);background:#06101fbd;border-radius:13px;padding:8px 10px;min-height:51px;display:grid;align-content:center}.chip b{font-size:.73rem;letter-spacing:.07em}.chip span{font-size:.6rem;color:#7790a2}.chip.right{text-align:right}.pause{grid-column:1/-1;min-height:46px;font-size:1rem}.stats{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;color:#8298aa;font-size:.74rem}.stats button{border:1px solid #35516a;background:#071426;color:white;border-radius:12px;padding:8px 12px}@media(max-width:520px){.modes{grid-template-columns:1fr}.top .actions{grid-template-columns:repeat(2,41px)}.icon{width:41px;height:41px}.card,.vs{min-height:70px}}@media(orientation:portrait) and (max-height:820px){canvas{max-height:55dvh}.card,.vs{min-height:66px}.bottom{margin-top:6px}.chip{min-height:46px}.stats{margin-top:6px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#020713">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LW Pong">
+  <meta name="screen-orientation" content="portrait">
+  <meta name="description" content="Lightning vs Wind Pong - arcade game installabile e full screen.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>Lightning vs Wind Pong</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="app">
-<header class="top"><div><p class="eyebrow">ARCADE DUEL</p><h1 class="title">LIGHTNING <span>VS</span> WIND PONG</h1></div><div class="actions"><button id="installBtn" class="icon install-hidden" title="Installa">⬇️</button><button id="soundBtn" class="icon" title="Audio">🔊</button><button id="fullBtn" class="icon" title="Schermo intero">⛶</button></div></header>
-<section class="scores"><div class="card left"><span>LIGHTNING</span><b id="ls">0</b></div><div class="vs"><strong>VS</strong><small id="info">FIRST TO 10</small></div><div class="card right"><span>WIND</span><b id="rs">0</b></div></section>
-<section class="arena"><canvas id="game" width="720" height="960"></canvas>
-<div id="start" class="overlay show"><div class="panel"><h2>PRONTO ALLA SFIDA?</h2><p>Versione verticale, audio e installazione PWA.</p><div class="modes"><button id="cpu" class="btn primary">⚡ 1 GIOCATORE<br><small>Lightning vs CPU</small></button><button id="two" class="btn">🌪️ 2 GIOCATORI<br><small>Stesso dispositivo</small></button></div><div class="difficulty"><button data-d="easy">Facile</button><button data-d="normal" class="active">Media</button><button data-d="hard">Difficile</button></div><div class="audioRow"><button id="music" class="active">🎵 MUSICA ON</button><button id="sfx" class="active">🔊 EFFETTI ON</button></div><p>Smartphone: trascina nella metà sinistra o destra del campo.<br>PC: W/S · ↑/↓ · P pausa.</p></div></div>
-<div id="pauseOv" class="overlay"><div class="panel"><h2>PAUSA</h2><button id="resume" class="btn primary">RIPRENDI</button> <button id="restart" class="btn">RICOMINCIA</button></div></div>
-<div id="over" class="overlay"><div class="panel"><h2 id="winner">VINCE!</h2><p id="final">10 - 0</p><button id="rematch" class="btn primary">RIVINCITA</button> <button id="menu" class="btn">MENU</button></div></div>
-</section>
-<section class="bottom"><div class="chip"><b>LIGHTNING</b><span>W/S · TOUCH SINISTRA</span></div><div class="chip right"><b>WIND</b><span>↑/↓ · TOUCH DESTRA</span></div><button id="pauseBtn" class="btn pause">⏸ PAUSA</button></section>
-<section class="stats"><span>⚡ Vittorie: <b id="lw">0</b></span><span>🌪️ Vittorie: <b id="rw">0</b></span><button id="resetStats">Azzera statistiche</button></section>
-</main>
-<script>
-(()=>{"use strict";const c=document.getElementById('game'),x=c.getContext('2d'),W=c.width,H=c.height,WIN=10;const $=id=>document.getElementById(id);const ui={ls:$('ls'),rs:$('rs'),info:$('info'),start:$('start'),pause:$('pauseOv'),over:$('over'),winner:$('winner'),final:$('final'),install:$('installBtn'),sound:$('soundBtn'),music:$('music'),sfx:$('sfx')};let mode='cpu',diff='normal',running=false,paused=false,gameOver=false,waiting=false,last=performance.now(),LS=0,RS=0,installPrompt=null;const keys={w:0,s:0,up:0,down:0},touch={l:null,r:null},L={x:28,y:H/2-88,w:15,h:176,speed:620},R={x:W-43,y:H/2-88,w:15,h:176,speed:620},B={x:W/2,y:H/2,r:10,vx:0,vy:0,speed:465,max:1120};const trail=[],parts=[],stars=[];for(let i=0;i<75;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:.5+Math.random()*1.6,a:.15+Math.random()*.55});let stats=(()=>{try{return Object.assign({l:0,r:0},JSON.parse(localStorage.getItem('lwp-stats')||'{}'))}catch{return{l:0,r:0}}})();function stat(){ $('lw').textContent=stats.l;$('rw').textContent=stats.r }stat();function save(){localStorage.setItem('lwp-stats',JSON.stringify(stats));stat()}function clamp(v,a,b){return Math.max(a,Math.min(b,v))}function resetP(){L.y=R.y=H/2-L.h/2}function resetB(dir=Math.random()>.5?1:-1){B.x=W/2;B.y=H/2;B.speed=465;let a=Math.random()*.82-.41;B.vx=Math.cos(a)*B.speed*dir;B.vy=Math.sin(a)*B.speed;trail.length=0}function scoreUI(){ui.ls.textContent=LS;ui.rs.textContent=RS}
-let ac=null,sfxOn=true,musicOn=true,musicTimer=null,step=0;function unlock(){if(!ac){const A=window.AudioContext||window.webkitAudioContext;if(A)ac=new A()}if(ac?.state==='suspended')ac.resume()}function tone(f,d=.05,type='sine',v=.03,delay=0){if(!sfxOn)return;unlock();if(!ac)return;let t=ac.currentTime+delay,o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.setValueAtTime(f,t);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+d+.02)}function note(f){if(!musicOn||!running||paused)return;unlock();if(!ac)return;let t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain();o.type='triangle';o.frequency.value=f;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.012,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.2);o.connect(g);g.connect(ac.destination);o.start();o.stop(t+.23)}function musicStart(){if(!musicOn||musicTimer)return;const n=[146.83,174.61,220,196,174.61,146.83,130.81,146.83];musicTimer=setInterval(()=>{if(running&&!paused&&musicOn){note(n[step%n.length]);step++}},270)}function musicStop(){clearInterval(musicTimer);musicTimer=null}
-async function fullscreen(){try{if(document.fullscreenElement){await document.exitFullscreen?.();return}await document.documentElement.requestFullscreen?.();try{await screen.orientation?.lock?.('portrait-primary')}catch{}}catch{}}function start(m){unlock();mode=m;LS=RS=0;scoreUI();running=true;paused=gameOver=waiting=false;ui.start.classList.remove('show');ui.pause.classList.remove('show');ui.over.classList.remove('show');ui.info.textContent=mode==='cpu'?`CPU ${diff.toUpperCase()} · FIRST TO ${WIN}`:`2 PLAYERS · FIRST TO ${WIN}`;resetP();resetB();tone(220,.08,'sine',.04);musicStart();if(innerWidth<900&&!document.fullscreenElement){fullscreen()}}function togglePause(force){if(!running||gameOver)return;paused=typeof force==='boolean'?force:!paused;ui.pause.classList.toggle('show',paused);$('pauseBtn').textContent=paused?'▶ RIPRENDI':'⏸ PAUSA';if(paused)musicStop();else{last=performance.now();musicStart()}}
-function point(side){if(side==='l'){LS++;burst(W*.7,H/2,'l',65);tone(560,.08,'triangle',.04);tone(750,.1,'sine',.03,.07)}else{RS++;burst(W*.3,H/2,'r',65);tone(430,.08,'triangle',.04);tone(580,.1,'sine',.03,.07)}scoreUI();if(LS>=WIN||RS>=WIN){gameOver=true;running=false;musicStop();let l=LS>RS;if(l){stats.l++;ui.winner.textContent='⚡ LIGHTNING VINCE!'}else{stats.r++;ui.winner.textContent='🌪️ WIND VINCE!'}save();ui.final.textContent=`${LS} - ${RS}`;ui.over.classList.add('show');[1,1.25,1.5,2].forEach((m,i)=>tone((l?440:350)*m,.16,l?'square':'sine',.035,i*.12));return}waiting=true;B.x=W/2;B.y=H/2;B.vx=B.vy=0;setTimeout(()=>{if(running&&!gameOver){waiting=false;resetB(side==='l'?-1:1)}},650)}
-function reflect(p,side){let center=p.y+p.h/2,off=(B.y-center)/(p.h/2),a=clamp(off,-1,1)*1.02;B.speed=Math.min(B.speed+38,B.max);let dir=side==='l'?1:-1;B.vx=Math.cos(a)*B.speed*dir;B.vy=Math.sin(a)*B.speed;burst(B.x,B.y,side,28);tone(side==='l'?760:610,.05,side==='l'?'square':'sine',.035)}function hit(p,side){if(B.y+B.r<p.y||B.y-B.r>p.y+p.h)return;if(side==='l'&&B.vx<0&&B.x-B.r<=p.x+p.w&&B.x+B.r>=p.x){B.x=p.x+p.w+B.r;reflect(p,'l')}if(side==='r'&&B.vx>0&&B.x+B.r>=p.x&&B.x-B.r<=p.x+p.w){B.x=p.x-B.r;reflect(p,'r')}}
-let cpuY=H/2,cpuT=0;function predict(){if(B.vx<=0)return H/2+(Math.random()-.5)*180;let t=(R.x-B.x)/B.vx,y=B.y+B.vy*t,top=28,bot=H-28;while(y<top||y>bot){if(y<top)y=top+(top-y);if(y>bot)y=bot-(y-bot)}return y}function cpu(dt){let cfg={easy:[390,.22,95],normal:[525,.11,52],hard:[640,.055,20]}[diff];cpuT-=dt;if(cpuT<=0){cpuT=cfg[1];cpuY=predict()+(Math.random()*2-1)*cfg[2]}let d=cpuY-(R.y+R.h/2),m=cfg[0]*dt;if(Math.abs(d)>6)R.y+=clamp(d,-m,m)}function update(dt){if(keys.w)L.y-=L.speed*dt;if(keys.s)L.y+=L.speed*dt;if(touch.l!=null)L.y+=(touch.l-L.h/2-L.y)*Math.min(1,14*dt);if(mode==='two'){if(keys.up)R.y-=R.speed*dt;if(keys.down)R.y+=R.speed*dt;if(touch.r!=null)R.y+=(touch.r-R.h/2-R.y)*Math.min(1,14*dt)}else cpu(dt);L.y=clamp(L.y,18,H-L.h-18);R.y=clamp(R.y,18,H-R.h-18);if(waiting)return;trail.unshift({x:B.x,y:B.y,a:1,s:B.vx>0?'r':'l'});if(trail.length>18)trail.pop();B.x+=B.vx*dt;B.y+=B.vy*dt;if(B.y<=28&&B.vy<0){B.y=28;B.vy*=-1;tone(500,.035,'triangle',.02)}if(B.y>=H-28&&B.vy>0){B.y=H-28;B.vy*=-1;tone(500,.035,'triangle',.02)}hit(L,'l');hit(R,'r');if(B.x<-40)point('r');if(B.x>W+40)point('l')}
-function burst(px,py,s,n){for(let i=0;i<n;i++){let a=Math.random()*Math.PI*2,sp=40+Math.random()*230;parts.push({x:px,y:py,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.25+Math.random()*.65,max:.9,s,r:1+Math.random()*3})}}function draw(){x.clearRect(0,0,W,H);let g=x.createLinearGradient(0,0,W,0);g.addColorStop(0,'#031b2d');g.addColorStop(.5,'#051121');g.addColorStop(1,'#151a28');x.fillStyle=g;x.fillRect(0,0,W,H);for(const s of stars){x.fillStyle=`rgba(185,230,255,${s.a})`;x.beginPath();x.arc(s.x,s.y,s.r,0,Math.PI*2);x.fill()}x.strokeStyle='rgba(160,220,255,.12)';x.setLineDash([10,15]);x.beginPath();x.moveTo(W/2,22);x.lineTo(W/2,H-22);x.stroke();x.setLineDash([]);for(let i=trail.length-1;i>=0;i--){let t=trail[i],a=(1-i/trail.length)*.28;x.fillStyle=t.s==='l'?`rgba(40,217,255,${a})`:`rgba(255,255,255,${a})`;x.beginPath();x.arc(t.x,t.y,B.r*(1-i/trail.length),0,Math.PI*2);x.fill()}for(let i=parts.length-1;i>=0;i--){let p=parts[i],a=clamp(p.life/p.max,0,1);x.fillStyle=p.s==='l'?`rgba(40,220,255,${a})`:`rgba(245,250,255,${a})`;x.beginPath();x.arc(p.x,p.y,p.r*a,0,Math.PI*2);x.fill()}drawP(L,'l');drawP(R,'r');x.save();x.shadowBlur=28;x.shadowColor=B.vx>0?'#fff':'#28d9ff';x.fillStyle='#f7fdff';x.beginPath();x.arc(B.x,B.y,B.r,0,Math.PI*2);x.fill();x.restore()}function drawP(p,s){x.save();x.shadowBlur=26;x.shadowColor=s==='l'?'#28d9ff':'#fff';x.fillStyle=s==='l'?'#25d8ff':'#edf7ff';x.beginPath();x.roundRect(p.x,p.y,p.w,p.h,8);x.fill();x.restore()}function loop(now){let dt=Math.min((now-last)/1000,.025);last=now;if(running&&!paused&&!gameOver)update(dt);for(let i=parts.length-1;i>=0;i--){let p=parts[i];p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;if(p.life<=0)parts.splice(i,1)}draw();requestAnimationFrame(loop)}
-function pos(cx,cy){let r=c.getBoundingClientRect();return{x:(cx-r.left)*W/r.width,y:(cy-r.top)*H/r.height}}c.addEventListener('pointerdown',e=>{c.setPointerCapture?.(e.pointerId);let p=pos(e.clientX,e.clientY);if(p.x<W/2)touch.l=p.y;else if(mode==='two')touch.r=p.y;unlock()});c.addEventListener('pointermove',e=>{if(e.buttons||e.pointerType==='touch'){let p=pos(e.clientX,e.clientY);if(p.x<W/2)touch.l=p.y;else if(mode==='two')touch.r=p.y}});c.addEventListener('pointerup',e=>{let p=pos(e.clientX,e.clientY);if(p.x<W/2)touch.l=null;else touch.r=null});window.addEventListener('keydown',e=>{let k=e.key.toLowerCase();if(['arrowup','arrowdown',' '].includes(k))e.preventDefault();if(k==='w')keys.w=1;if(k==='s')keys.s=1;if(k==='arrowup')keys.up=1;if(k==='arrowdown')keys.down=1;if(k==='p'&&!e.repeat)togglePause()});window.addEventListener('keyup',e=>{let k=e.key.toLowerCase();if(k==='w')keys.w=0;if(k==='s')keys.s=0;if(k==='arrowup')keys.up=0;if(k==='arrowdown')keys.down=0});
-$('cpu').onclick=()=>start('cpu');$('two').onclick=()=>start('two');$('pauseBtn').onclick=()=>togglePause();$('resume').onclick=()=>togglePause(false);$('restart').onclick=()=>start(mode);$('rematch').onclick=()=>start(mode);$('menu').onclick=()=>{running=false;paused=false;gameOver=false;musicStop();LS=RS=0;scoreUI();ui.over.classList.remove('show');ui.pause.classList.remove('show');ui.start.classList.add('show');ui.info.textContent='FIRST TO 10'};$('fullBtn').onclick=fullscreen;document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{diff=b.dataset.d;document.querySelectorAll('[data-d]').forEach(z=>z.classList.toggle('active',z===b))});ui.music.onclick=()=>{musicOn=!musicOn;ui.music.classList.toggle('active',musicOn);ui.music.textContent=musicOn?'🎵 MUSICA ON':'🎵 MUSICA OFF';if(musicOn)musicStart();else musicStop();ui.sound.textContent=(musicOn||sfxOn)?'🔊':'🔇'};ui.sfx.onclick=()=>{sfxOn=!sfxOn;ui.sfx.classList.toggle('active',sfxOn);ui.sfx.textContent=sfxOn?'🔊 EFFETTI ON':'🔇 EFFETTI OFF';if(sfxOn)tone(680,.06,'sine',.025);ui.sound.textContent=(musicOn||sfxOn)?'🔊':'🔇'};ui.sound.onclick=()=>{let on=!(musicOn||sfxOn);musicOn=sfxOn=on;ui.sound.textContent=on?'🔊':'🔇';ui.music.classList.toggle('active',on);ui.sfx.classList.toggle('active',on);ui.music.textContent=on?'🎵 MUSICA ON':'🎵 MUSICA OFF';ui.sfx.textContent=on?'🔊 EFFETTI ON':'🔇 EFFETTI OFF';if(on)musicStart();else musicStop()};$('resetStats').onclick=()=>{stats={l:0,r:0};save()};window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;ui.install.classList.remove('install-hidden')});ui.install.onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();try{await installPrompt.userChoice}catch{}installPrompt=null;ui.install.classList.add('install-hidden')};window.addEventListener('appinstalled',()=>ui.install.classList.add('install-hidden'));document.addEventListener('visibilitychange',()=>{if(document.hidden&&running&&!paused)togglePause(true)});if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));resetP();draw();requestAnimationFrame(loop)})();
-</script>
-</body></html>
+  <main id="app" class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="eyebrow">ARCADE DUEL</span>
+        <h1>LIGHTNING <i>VS</i> WIND PONG</h1>
+      </div>
+      <div class="top-actions">
+        <button id="installBtn" class="icon-btn hidden" type="button" aria-label="Installa app" title="Installa app">⬇</button>
+        <button id="soundBtn" class="icon-btn" type="button" aria-label="Audio" title="Audio">🔊</button>
+        <button id="fullBtn" class="icon-btn" type="button" aria-label="Schermo intero" title="Schermo intero">⛶</button>
+        <button id="pauseTopBtn" class="icon-btn" type="button" aria-label="Pausa" title="Pausa">⏸</button>
+      </div>
+    </header>
+
+    <section class="scorebar" aria-label="Punteggio">
+      <div class="score score-lightning"><span>LIGHTNING</span><strong id="leftScore">0</strong></div>
+      <div class="match"><b>VS</b><small id="matchInfo">FIRST TO 10</small></div>
+      <div class="score score-wind"><span>WIND</span><strong id="rightScore">0</strong></div>
+    </section>
+
+    <section class="arena-shell">
+      <canvas id="gameCanvas" width="720" height="1120" aria-label="Campo di gioco"></canvas>
+
+      <div id="startOverlay" class="overlay show">
+        <div class="panel">
+          <div class="panel-kicker">PORTRAIT FULL SCREEN</div>
+          <h2>PRONTO?</h2>
+          <p>Il pulsante <b>↓ a sinistra</b> porta Lightning in basso; il pulsante <b>↑ a destra</b> la porta in alto.</p>
+          <div class="mode-row">
+            <button id="cpuBtn" class="menu-btn primary" type="button">⚡ 1 GIOCATORE<small>contro CPU</small></button>
+            <button id="twoBtn" class="menu-btn" type="button">🌪️ 2 GIOCATORI<small>stesso dispositivo</small></button>
+          </div>
+          <div class="difficulty">
+            <button data-difficulty="easy" type="button">Facile</button>
+            <button data-difficulty="normal" class="active" type="button">Media</button>
+            <button data-difficulty="hard" type="button">Difficile</button>
+          </div>
+          <div class="audio-row">
+            <button id="musicBtn" class="toggle active" type="button">🎵 MUSICA</button>
+            <button id="sfxBtn" class="toggle active" type="button">🔊 EFFETTI</button>
+          </div>
+          <div class="wins">⚡ <b id="leftWins">0</b> vittorie &nbsp;·&nbsp; 🌪️ <b id="rightWins">0</b> vittorie</div>
+        </div>
+      </div>
+
+      <div id="pauseOverlay" class="overlay">
+        <div class="panel compact">
+          <div class="panel-kicker">MATCH IN PAUSA</div>
+          <h2>PAUSA</h2>
+          <button id="resumeBtn" class="menu-btn primary" type="button">▶ RIPRENDI</button>
+          <button id="restartBtn" class="menu-btn" type="button">↻ RICOMINCIA</button>
+          <button id="menuBtnPause" class="menu-btn" type="button">☰ MENU</button>
+        </div>
+      </div>
+
+      <div id="gameOverOverlay" class="overlay">
+        <div class="panel compact">
+          <div class="panel-kicker">DUELLO CONCLUSO</div>
+          <h2 id="winnerText">LIGHTNING VINCE!</h2>
+          <div id="finalScore" class="final-score">10 - 8</div>
+          <button id="rematchBtn" class="menu-btn primary" type="button">⚡ RIVINCITA</button>
+          <button id="menuBtn" class="menu-btn" type="button">☰ MENU</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="mobile-controls" aria-label="Controlli racchetta Lightning">
+      <button id="downBtn" class="move-btn down-btn" type="button" aria-label="Muovi racchetta in basso">
+        <span class="arrow">↓</span><span class="move-label">GIÙ</span>
+      </button>
+      <button id="upBtn" class="move-btn up-btn" type="button" aria-label="Muovi racchetta in alto">
+        <span class="arrow">↑</span><span class="move-label">SU</span>
+      </button>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,830 +1,268 @@
-(() => {
-  "use strict";
+(()=>{
+  'use strict';
 
-  const canvas = document.getElementById("gameCanvas");
-  const ctx = canvas.getContext("2d");
+  const canvas=document.getElementById('gameCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height,WIN=10;
+  const $=id=>document.getElementById(id);
 
-  const W = canvas.width;
-  const H = canvas.height;
-  const WIN_SCORE = 10;
-
-  const ui = {
-    leftScore: document.getElementById("leftScore"),
-    rightScore: document.getElementById("rightScore"),
-    matchInfo: document.getElementById("matchInfo"),
-    startOverlay: document.getElementById("startOverlay"),
-    pauseOverlay: document.getElementById("pauseOverlay"),
-    gameOverOverlay: document.getElementById("gameOverOverlay"),
-    winnerText: document.getElementById("winnerText"),
-    finalScoreText: document.getElementById("finalScoreText"),
-    cpuModeBtn: document.getElementById("cpuModeBtn"),
-    twoModeBtn: document.getElementById("twoModeBtn"),
-    difficultyBox: document.getElementById("difficultyBox"),
-    difficultyButtons: [...document.querySelectorAll("[data-difficulty]")],
-    resumeBtn: document.getElementById("resumeBtn"),
-    restartBtn: document.getElementById("restartBtn"),
-    rematchBtn: document.getElementById("rematchBtn"),
-    menuBtn: document.getElementById("menuBtn"),
-    pauseBtn: document.getElementById("pauseBtn"),
-    fullscreenBtn: document.getElementById("fullscreenBtn"),
-    soundBtn: document.getElementById("soundBtn"),
-    leftWins: document.getElementById("leftWins"),
-    rightWins: document.getElementById("rightWins"),
-    resetStatsBtn: document.getElementById("resetStatsBtn"),
+  const ui={
+    leftScore:$('leftScore'),rightScore:$('rightScore'),matchInfo:$('matchInfo'),
+    start:$('startOverlay'),pause:$('pauseOverlay'),over:$('gameOverOverlay'),
+    winner:$('winnerText'),final:$('finalScore'),install:$('installBtn'),
+    sound:$('soundBtn'),music:$('musicBtn'),sfx:$('sfxBtn'),
+    leftWins:$('leftWins'),rightWins:$('rightWins'),down:$('downBtn'),up:$('upBtn')
   };
 
-  const keys = {
-    w: false,
-    s: false,
-    up: false,
-    down: false,
-  };
+  const keys={w:false,s:false,up:false,down:false};
+  const buttons={up:false,down:false};
+  const touch={left:null,right:null};
 
-  const touchTargets = {
-    left: null,
-    right: null,
-  };
+  const L={x:30,y:H/2-92,w:16,h:184,speed:720};
+  const R={x:W-46,y:H/2-92,w:16,h:184,speed:720};
+  const B={x:W/2,y:H/2,r:10,vx:0,vy:0,speed:500,max:1180};
 
-  const leftPaddle = {
-    x: 34,
-    y: H / 2 - 72,
-    w: 16,
-    h: 144,
-    speed: 510,
-  };
+  const trail=[],particles=[],stars=[];
+  for(let i=0;i<84;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:.5+Math.random()*1.7,a:.12+Math.random()*.56});
 
-  const rightPaddle = {
-    x: W - 50,
-    y: H / 2 - 72,
-    w: 16,
-    h: 144,
-    speed: 510,
-  };
+  let leftScore=0,rightScore=0,mode='cpu',difficulty='normal';
+  let running=false,paused=false,gameOver=false,waiting=false,last=performance.now();
+  let cpuTarget=H/2,cpuTimer=0,installPrompt=null;
 
-  const ball = {
-    x: W / 2,
-    y: H / 2,
-    r: 10,
-    vx: 0,
-    vy: 0,
-    speed: 410,
-    maxSpeed: 980,
-  };
-
-  const particles = [];
-  const trail = [];
-  const ambient = [];
-
-  let leftScore = 0;
-  let rightScore = 0;
-  let mode = "cpu";
-  let difficulty = "normal";
-  let running = false;
-  let paused = false;
-  let gameOver = false;
-  let waitingServe = false;
-  let lastTime = performance.now();
-  let soundEnabled = true;
-  let audioCtx = null;
-  let cpuTargetY = H / 2;
-  let cpuThinkTimer = 0;
-
-  let stats = loadStats();
+  let stats=loadStats();
   renderStats();
 
-  function loadStats() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem("lwp-stats") || "{}");
-      return {
-        leftWins: Number(parsed.leftWins) || 0,
-        rightWins: Number(parsed.rightWins) || 0,
-      };
-    } catch {
-      return { leftWins: 0, rightWins: 0 };
-    }
+  function loadStats(){
+    try{return Object.assign({left:0,right:0},JSON.parse(localStorage.getItem('lwp-v3-stats')||'{}'));}
+    catch{return{left:0,right:0};}
+  }
+  function saveStats(){localStorage.setItem('lwp-v3-stats',JSON.stringify(stats));renderStats();}
+  function renderStats(){ui.leftWins.textContent=stats.left;ui.rightWins.textContent=stats.right;}
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function scoreUI(){ui.leftScore.textContent=leftScore;ui.rightScore.textContent=rightScore;}
+
+  function resetPaddles(){L.y=H/2-L.h/2;R.y=H/2-R.h/2;}
+  function resetBall(dir=Math.random()>.5?1:-1){
+    B.x=W/2;B.y=H/2;B.speed=500;
+    const a=Math.random()*.8-.4;
+    B.vx=Math.cos(a)*B.speed*dir;B.vy=Math.sin(a)*B.speed;
+    trail.length=0;
   }
 
-  function saveStats() {
-    localStorage.setItem("lwp-stats", JSON.stringify(stats));
-    renderStats();
+  async function requestPortraitFullscreen(){
+    try{
+      if(!document.fullscreenElement){
+        const el=document.documentElement;
+        if(el.requestFullscreen)await el.requestFullscreen({navigationUI:'hide'});
+        else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+      }
+      if(screen.orientation?.lock){
+        try{await screen.orientation.lock('portrait-primary');}catch{}
+      }
+    }catch{}
   }
 
-  function renderStats() {
-    ui.leftWins.textContent = stats.leftWins;
-    ui.rightWins.textContent = stats.rightWins;
-  }
-
-  function initAmbient() {
-    ambient.length = 0;
-    for (let i = 0; i < 72; i++) {
-      ambient.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        r: 0.5 + Math.random() * 1.8,
-        a: 0.15 + Math.random() * 0.55,
-        vy: -2 - Math.random() * 6,
-        tw: Math.random() * Math.PI * 2,
-      });
-    }
-  }
-
-  function resetPaddles() {
-    leftPaddle.y = H / 2 - leftPaddle.h / 2;
-    rightPaddle.y = H / 2 - rightPaddle.h / 2;
-  }
-
-  function resetBall(direction = Math.random() > 0.5 ? 1 : -1) {
-    ball.x = W / 2;
-    ball.y = H / 2;
-    ball.speed = 410;
-    const angle = (Math.random() * 0.9 - 0.45);
-    ball.vx = Math.cos(angle) * ball.speed * direction;
-    ball.vy = Math.sin(angle) * ball.speed;
-    trail.length = 0;
-  }
-
-  function startMatch(selectedMode) {
+  function startGame(selectedMode){
     unlockAudio();
-    mode = selectedMode;
-    leftScore = 0;
-    rightScore = 0;
-    gameOver = false;
-    paused = false;
-    running = true;
-    waitingServe = false;
-    ui.startOverlay.classList.remove("visible");
-    ui.pauseOverlay.classList.remove("visible");
-    ui.gameOverOverlay.classList.remove("visible");
-    ui.matchInfo.textContent = mode === "cpu"
-      ? `CPU ${difficulty.toUpperCase()} · FIRST TO ${WIN_SCORE}`
-      : `2 PLAYERS · FIRST TO ${WIN_SCORE}`;
-    updateScoreUI();
-    resetPaddles();
-    resetBall();
-    playTone(220, 0.07, "sine", 0.04);
+    mode=selectedMode;leftScore=0;rightScore=0;running=true;paused=false;gameOver=false;waiting=false;
+    scoreUI();resetPaddles();resetBall();
+    ui.start.classList.remove('show');ui.pause.classList.remove('show');ui.over.classList.remove('show');
+    ui.matchInfo.textContent=mode==='cpu'?`CPU ${difficulty.toUpperCase()} · FIRST TO ${WIN}`:`2 PLAYERS · FIRST TO ${WIN}`;
+    if(musicOn)startMusic();
+    tone(230,.08,'sine',.04);
+    if(innerWidth<900)requestPortraitFullscreen();
   }
 
-  function restartMatch() {
-    startMatch(mode);
+  function returnMenu(){
+    running=false;paused=false;gameOver=false;stopMusic();buttons.up=buttons.down=false;
+    leftScore=rightScore=0;scoreUI();resetPaddles();B.x=W/2;B.y=H/2;B.vx=B.vy=0;
+    ui.pause.classList.remove('show');ui.over.classList.remove('show');ui.start.classList.add('show');
+    ui.matchInfo.textContent='FIRST TO 10';
   }
 
-  function showMenu() {
-    running = false;
-    paused = false;
-    gameOver = false;
-    leftScore = 0;
-    rightScore = 0;
-    updateScoreUI();
-    resetPaddles();
-    ball.x = W / 2;
-    ball.y = H / 2;
-    ball.vx = 0;
-    ball.vy = 0;
-    trail.length = 0;
-    particles.length = 0;
-    ui.gameOverOverlay.classList.remove("visible");
-    ui.pauseOverlay.classList.remove("visible");
-    ui.startOverlay.classList.add("visible");
-    ui.matchInfo.textContent = `FIRST TO ${WIN_SCORE}`;
+  function togglePause(force){
+    if(!running||gameOver)return;
+    paused=typeof force==='boolean'?force:!paused;
+    buttons.up=buttons.down=false;clearPressed();
+    ui.pause.classList.toggle('show',paused);
+    if(paused)stopMusic();else{last=performance.now();if(musicOn)startMusic();}
   }
 
-  function togglePause(force) {
-    if (!running || gameOver) return;
-    paused = typeof force === "boolean" ? force : !paused;
-    ui.pauseOverlay.classList.toggle("visible", paused);
-    ui.pauseBtn.textContent = paused ? "▶ RIPRENDI" : "⏸ PAUSA";
-    if (!paused) lastTime = performance.now();
-  }
-
-  function updateScoreUI() {
-    ui.leftScore.textContent = leftScore;
-    ui.rightScore.textContent = rightScore;
-  }
-
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  function updatePaddles(dt) {
-    if (keys.w) leftPaddle.y -= leftPaddle.speed * dt;
-    if (keys.s) leftPaddle.y += leftPaddle.speed * dt;
-
-    if (touchTargets.left !== null) {
-      const desired = touchTargets.left - leftPaddle.h / 2;
-      leftPaddle.y += (desired - leftPaddle.y) * Math.min(1, 13 * dt);
+  function scorePoint(side){
+    if(side==='left'){
+      leftScore++;burst(W*.72,H*.5,'lightning',70);tone(560,.08,'triangle',.04);tone(760,.1,'sine',.03,.07);
+    }else{
+      rightScore++;burst(W*.28,H*.5,'wind',70);tone(430,.08,'triangle',.04);tone(580,.1,'sine',.03,.07);
     }
-
-    if (mode === "two") {
-      if (keys.up) rightPaddle.y -= rightPaddle.speed * dt;
-      if (keys.down) rightPaddle.y += rightPaddle.speed * dt;
-
-      if (touchTargets.right !== null) {
-        const desired = touchTargets.right - rightPaddle.h / 2;
-        rightPaddle.y += (desired - rightPaddle.y) * Math.min(1, 13 * dt);
-      }
-    } else {
-      updateCPU(dt);
-    }
-
-    leftPaddle.y = clamp(leftPaddle.y, 18, H - leftPaddle.h - 18);
-    rightPaddle.y = clamp(rightPaddle.y, 18, H - rightPaddle.h - 18);
-
-    emitPaddleAura(leftPaddle, "lightning", dt);
-    emitPaddleAura(rightPaddle, "wind", dt);
+    scoreUI();
+    if(leftScore>=WIN||rightScore>=WIN){finishGame();return;}
+    waiting=true;B.x=W/2;B.y=H/2;B.vx=B.vy=0;trail.length=0;
+    setTimeout(()=>{if(running&&!gameOver){waiting=false;resetBall(side==='left'?-1:1);}},620);
   }
 
-  function updateCPU(dt) {
-    const cfg = {
-      easy: { speed: 315, reaction: 0.22, error: 74 },
-      normal: { speed: 430, reaction: 0.11, error: 38 },
-      hard: { speed: 535, reaction: 0.055, error: 15 },
-    }[difficulty];
+  function finishGame(){
+    running=false;gameOver=true;stopMusic();
+    const leftWon=leftScore>rightScore;
+    if(leftWon){stats.left++;ui.winner.textContent='⚡ LIGHTNING VINCE!';}
+    else{stats.right++;ui.winner.textContent='🌪️ WIND VINCE!';}
+    saveStats();ui.final.textContent=`${leftScore} - ${rightScore}`;ui.over.classList.add('show');
+    [1,1.25,1.5,2].forEach((m,i)=>tone((leftWon?440:350)*m,.16,leftWon?'square':'sine',.035,i*.12));
+  }
 
-    cpuThinkTimer -= dt;
-    if (cpuThinkTimer <= 0) {
-      cpuThinkTimer = cfg.reaction;
-      const predicted = predictBallYAtX(rightPaddle.x);
-      const error = (Math.random() * 2 - 1) * cfg.error;
-      cpuTargetY = predicted + error;
-    }
+  function reflect(p,side){
+    const center=p.y+p.h/2,offset=(B.y-center)/(p.h/2),angle=clamp(offset,-1,1)*1.02;
+    B.speed=Math.min(B.speed+40,B.max);
+    const dir=side==='left'?1:-1;
+    B.vx=Math.cos(angle)*B.speed*dir;B.vy=Math.sin(angle)*B.speed;
+    burst(B.x,B.y,side==='left'?'lightning':'wind',30);
+    tone(side==='left'?760:610,.05,side==='left'?'square':'sine',.035);
+  }
 
-    const center = rightPaddle.y + rightPaddle.h / 2;
-    const delta = cpuTargetY - center;
-    const maxMove = cfg.speed * dt;
+  function collide(p,side){
+    if(B.y+B.r<p.y||B.y-B.r>p.y+p.h)return;
+    if(side==='left'&&B.vx<0&&B.x-B.r<=p.x+p.w&&B.x+B.r>=p.x){B.x=p.x+p.w+B.r;reflect(p,'left');}
+    if(side==='right'&&B.vx>0&&B.x+B.r>=p.x&&B.x-B.r<=p.x+p.w){B.x=p.x-B.r;reflect(p,'right');}
+  }
 
-    if (Math.abs(delta) > 6) {
-      rightPaddle.y += clamp(delta, -maxMove, maxMove);
+  function predictBall(){
+    if(B.vx<=0)return H/2+(Math.random()-.5)*220;
+    const t=(R.x-B.x)/B.vx;let y=B.y+B.vy*t,top=28,bottom=H-28;
+    while(y<top||y>bottom){if(y<top)y=top+(top-y);if(y>bottom)y=bottom-(y-bottom);}
+    return y;
+  }
+
+  function updateCPU(dt){
+    const cfg={easy:[430,.22,110],normal:[570,.11,58],hard:[690,.055,22]}[difficulty];
+    cpuTimer-=dt;
+    if(cpuTimer<=0){cpuTimer=cfg[1];cpuTarget=predictBall()+(Math.random()*2-1)*cfg[2];}
+    const delta=cpuTarget-(R.y+R.h/2),maxMove=cfg[0]*dt;
+    if(Math.abs(delta)>6)R.y+=clamp(delta,-maxMove,maxMove);
+  }
+
+  function update(dt){
+    // Pulsanti richiesti: sinistra = GIÙ, destra = SU.
+    if(buttons.down||keys.s)L.y+=L.speed*dt;
+    if(buttons.up||keys.w)L.y-=L.speed*dt;
+    if(touch.left!==null)L.y+=(touch.left-L.h/2-L.y)*Math.min(1,14*dt);
+
+    if(mode==='two'){
+      if(keys.down)R.y+=R.speed*dt;if(keys.up)R.y-=R.speed*dt;
+      if(touch.right!==null)R.y+=(touch.right-R.h/2-R.y)*Math.min(1,14*dt);
+    }else updateCPU(dt);
+
+    L.y=clamp(L.y,18,H-L.h-18);R.y=clamp(R.y,18,H-R.h-18);
+    emitAura(L,'lightning',dt);emitAura(R,'wind',dt);
+    if(waiting)return;
+
+    trail.unshift({x:B.x,y:B.y,s:B.vx>=0?'wind':'lightning'});if(trail.length>20)trail.pop();
+    B.x+=B.vx*dt;B.y+=B.vy*dt;
+
+    if(B.y<=28&&B.vy<0){B.y=28;B.vy*=-1;tone(500,.035,'triangle',.022);}
+    if(B.y>=H-28&&B.vy>0){B.y=H-28;B.vy*=-1;tone(500,.035,'triangle',.022);}
+
+    collide(L,'left');collide(R,'right');
+    if(B.x<-42)scorePoint('right');
+    else if(B.x>W+42)scorePoint('left');
+  }
+
+  function burst(x,y,type,count){
+    for(let i=0;i<count;i++){
+      const a=Math.random()*Math.PI*2,sp=45+Math.random()*260;
+      particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.25+Math.random()*.68,max:.93,size:1+Math.random()*3.5,type});
     }
   }
-
-  function predictBallYAtX(targetX) {
-    if (ball.vx <= 0) {
-      return H / 2 + (Math.random() - 0.5) * 150;
-    }
-
-    const time = (targetX - ball.x) / ball.vx;
-    if (time <= 0) return ball.y;
-
-    let predicted = ball.y + ball.vy * time;
-    const top = 18 + ball.r;
-    const bottom = H - 18 - ball.r;
-    const span = bottom - top;
-
-    while (predicted < top || predicted > bottom) {
-      if (predicted < top) predicted = top + (top - predicted);
-      if (predicted > bottom) predicted = bottom - (predicted - bottom);
-    }
-
-    return clamp(predicted, top, top + span);
-  }
-
-  function updateBall(dt) {
-    if (waitingServe) return;
-
-    trail.unshift({
-      x: ball.x,
-      y: ball.y,
-      life: 1,
-      side: ball.vx >= 0 ? "wind" : "lightning",
-    });
-
-    if (trail.length > 18) trail.pop();
-    trail.forEach(t => t.life -= 2.2 * dt);
-
-    ball.x += ball.vx * dt;
-    ball.y += ball.vy * dt;
-
-    const top = 18 + ball.r;
-    const bottom = H - 18 - ball.r;
-
-    if (ball.y <= top && ball.vy < 0) {
-      ball.y = top;
-      ball.vy *= -1;
-      emitImpact(ball.x, ball.y, "wind", 12);
-      playTone(510, 0.035, "triangle", 0.025);
-    } else if (ball.y >= bottom && ball.vy > 0) {
-      ball.y = bottom;
-      ball.vy *= -1;
-      emitImpact(ball.x, ball.y, "wind", 12);
-      playTone(510, 0.035, "triangle", 0.025);
-    }
-
-    checkPaddleCollision(leftPaddle, "left");
-    checkPaddleCollision(rightPaddle, "right");
-
-    if (ball.x < -40) {
-      scorePoint("right");
-    } else if (ball.x > W + 40) {
-      scorePoint("left");
+  function emitAura(p,type,dt){
+    if(Math.random()<(type==='lightning'?23:14)*dt){
+      particles.push({x:p.x+p.w/2,y:p.y+Math.random()*p.h,vx:(Math.random()-.5)*70,vy:(Math.random()-.5)*70,life:.35,max:.35,size:1+Math.random()*2.5,type});
     }
   }
 
-  function checkPaddleCollision(paddle, side) {
-    const withinY =
-      ball.y + ball.r >= paddle.y &&
-      ball.y - ball.r <= paddle.y + paddle.h;
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const bg=ctx.createLinearGradient(0,0,W,0);bg.addColorStop(0,'#031b2d');bg.addColorStop(.5,'#051121');bg.addColorStop(1,'#141a28');ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
 
-    if (!withinY) return;
+    const lg=ctx.createRadialGradient(70,H/2,10,70,H/2,360);lg.addColorStop(0,'rgba(0,210,255,.18)');lg.addColorStop(1,'rgba(0,210,255,0)');ctx.fillStyle=lg;ctx.fillRect(0,0,W/2,H);
+    const rg=ctx.createRadialGradient(W-70,H/2,10,W-70,H/2,360);rg.addColorStop(0,'rgba(255,255,255,.10)');rg.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=rg;ctx.fillRect(W/2,0,W/2,H);
 
-    if (
-      side === "left" &&
-      ball.vx < 0 &&
-      ball.x - ball.r <= paddle.x + paddle.w &&
-      ball.x + ball.r >= paddle.x
-    ) {
-      ball.x = paddle.x + paddle.w + ball.r;
-      reflectFromPaddle(paddle, "left");
-    }
+    for(const s of stars){ctx.fillStyle=`rgba(185,230,255,${s.a})`;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();}
+    ctx.strokeStyle='rgba(160,220,255,.11)';ctx.setLineDash([10,16]);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(W/2,22);ctx.lineTo(W/2,H-22);ctx.stroke();ctx.setLineDash([]);
 
-    if (
-      side === "right" &&
-      ball.vx > 0 &&
-      ball.x + ball.r >= paddle.x &&
-      ball.x - ball.r <= paddle.x + paddle.w
-    ) {
-      ball.x = paddle.x - ball.r;
-      reflectFromPaddle(paddle, "right");
-    }
+    for(let i=trail.length-1;i>=0;i--){const t=trail[i],alpha=(1-i/trail.length)*.3,r=B.r*(.25+(1-i/trail.length)*.75);ctx.fillStyle=t.s==='lightning'?`rgba(39,220,255,${alpha})`:`rgba(255,255,255,${alpha})`;ctx.beginPath();ctx.arc(t.x,t.y,r,0,Math.PI*2);ctx.fill();}
+    for(const p of particles){const a=clamp(p.life/p.max,0,1);ctx.fillStyle=p.type==='lightning'?`rgba(39,220,255,${a})`:`rgba(245,250,255,${a})`;ctx.beginPath();ctx.arc(p.x,p.y,p.size*a,0,Math.PI*2);ctx.fill();}
+
+    drawPaddle(L,'lightning');drawPaddle(R,'wind');
+    ctx.save();ctx.shadowBlur=30;ctx.shadowColor=B.vx>=0?'#fff':'#27dcff';ctx.fillStyle='#f8fdff';ctx.beginPath();ctx.arc(B.x,B.y,B.r,0,Math.PI*2);ctx.fill();ctx.restore();
   }
 
-  function reflectFromPaddle(paddle, side) {
-    const center = paddle.y + paddle.h / 2;
-    const offset = (ball.y - center) / (paddle.h / 2);
-    const angle = clamp(offset, -1, 1) * 1.02;
-    ball.speed = Math.min(ball.speed + 34, ball.maxSpeed);
-    const dir = side === "left" ? 1 : -1;
-    ball.vx = Math.cos(angle) * ball.speed * dir;
-    ball.vy = Math.sin(angle) * ball.speed;
-
-    const type = side === "left" ? "lightning" : "wind";
-    emitImpact(ball.x, ball.y, type, 30);
-    playTone(side === "left" ? 740 : 590, 0.045, side === "left" ? "square" : "sine", 0.035);
+  function drawPaddle(p,type){
+    ctx.save();ctx.shadowBlur=28;ctx.shadowColor=type==='lightning'?'#27dcff':'#fff';
+    const g=ctx.createLinearGradient(p.x,p.y,p.x+p.w,p.y+p.h);
+    if(type==='lightning'){g.addColorStop(0,'#e8ffff');g.addColorStop(.35,'#28e3ff');g.addColorStop(1,'#0a8dff');}
+    else{g.addColorStop(0,'#fff');g.addColorStop(.5,'#edf8ff');g.addColorStop(1,'#a9b8c9');}
+    ctx.fillStyle=g;ctx.beginPath();ctx.roundRect(p.x,p.y,p.w,p.h,8);ctx.fill();ctx.restore();
   }
 
-  function scorePoint(side) {
-    if (side === "left") {
-      leftScore++;
-      emitImpact(W * 0.72, H / 2, "lightning", 70);
-      playScoreJingle(true);
-    } else {
-      rightScore++;
-      emitImpact(W * 0.28, H / 2, "wind", 70);
-      playScoreJingle(false);
-    }
-
-    updateScoreUI();
-
-    if (leftScore >= WIN_SCORE || rightScore >= WIN_SCORE) {
-      endMatch();
-      return;
-    }
-
-    waitingServe = true;
-    ball.x = W / 2;
-    ball.y = H / 2;
-    ball.vx = 0;
-    ball.vy = 0;
-    trail.length = 0;
-
-    window.setTimeout(() => {
-      if (!running || gameOver) return;
-      waitingServe = false;
-      resetBall(side === "left" ? -1 : 1);
-    }, 650);
+  function loop(now){
+    const dt=Math.min((now-last)/1000,.025);last=now;
+    if(running&&!paused&&!gameOver)update(dt);
+    for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.985;p.vy*=.985;if(p.life<=0)particles.splice(i,1);}
+    draw();requestAnimationFrame(loop);
   }
 
-  function endMatch() {
-    gameOver = true;
-    running = false;
-
-    const leftWon = leftScore > rightScore;
-    if (leftWon) {
-      stats.leftWins++;
-      ui.winnerText.textContent = "⚡ LIGHTNING VINCE!";
-      emitImpact(W * 0.33, H / 2, "lightning", 140);
-    } else {
-      stats.rightWins++;
-      ui.winnerText.textContent = "🌪️ WIND VINCE!";
-      emitImpact(W * 0.67, H / 2, "wind", 140);
-    }
-
-    saveStats();
-    ui.finalScoreText.textContent = `${leftScore} - ${rightScore}`;
-    ui.gameOverOverlay.classList.add("visible");
-    playVictoryJingle(leftWon);
+  // AUDIO
+  let audioCtx=null,sfxOn=true,musicOn=true,musicTimer=null,musicStep=0;
+  function unlockAudio(){if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audioCtx=new AC();}if(audioCtx?.state==='suspended')audioCtx.resume();}
+  function tone(freq,duration=.05,type='sine',volume=.03,delay=0){
+    if(!sfxOn)return;unlockAudio();if(!audioCtx)return;
+    const t=audioCtx.currentTime+delay,o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(volume,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+duration+.02);
   }
-
-  function updateParticles(dt) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.life -= dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vx *= Math.pow(0.97, dt * 60);
-      p.vy *= Math.pow(0.97, dt * 60);
-
-      if (p.type === "wind") {
-        p.vy -= 8 * dt;
-      }
-
-      if (p.life <= 0) particles.splice(i, 1);
-    }
+  function musicNote(freq){
+    if(!musicOn||!running||paused)return;unlockAudio();if(!audioCtx)return;
+    const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='triangle';o.frequency.value=freq;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.011,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.19);o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+.22);
   }
+  function startMusic(){if(!musicOn||musicTimer)return;const notes=[146.83,174.61,220,196,174.61,146.83,130.81,146.83];musicTimer=setInterval(()=>{if(running&&!paused&&musicOn){musicNote(notes[musicStep%notes.length]);musicStep++;}},270);}
+  function stopMusic(){if(musicTimer){clearInterval(musicTimer);musicTimer=null;}}
 
-  function emitPaddleAura(paddle, type, dt) {
-    const rate = type === "lightning" ? 22 : 14;
-    const count = Math.random() < rate * dt ? 1 : 0;
-    for (let i = 0; i < count; i++) {
-      particles.push({
-        x: paddle.x + paddle.w / 2 + (Math.random() - 0.5) * 16,
-        y: paddle.y + Math.random() * paddle.h,
-        vx: (Math.random() - 0.5) * 70,
-        vy: (Math.random() - 0.5) * 70,
-        life: 0.25 + Math.random() * 0.35,
-        maxLife: 0.6,
-        size: 1 + Math.random() * 3,
-        type,
-      });
-    }
+  // TOUCH SUL CAMPO resta disponibile; i due pulsanti sono il controllo principale Lightning.
+  function canvasPos(cx,cy){const r=canvas.getBoundingClientRect();return{x:(cx-r.left)*W/r.width,y:(cy-r.top)*H/r.height};}
+  canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture?.(e.pointerId);const p=canvasPos(e.clientX,e.clientY);if(p.x<W/2)touch.left=p.y;else if(mode==='two')touch.right=p.y;unlockAudio();});
+  canvas.addEventListener('pointermove',e=>{if(e.buttons||e.pointerType==='touch'){const p=canvasPos(e.clientX,e.clientY);if(p.x<W/2)touch.left=p.y;else if(mode==='two')touch.right=p.y;}});
+  canvas.addEventListener('pointerup',e=>{const p=canvasPos(e.clientX,e.clientY);if(p.x<W/2)touch.left=null;else touch.right=null;});
+  canvas.addEventListener('pointercancel',()=>{touch.left=touch.right=null;});
+
+  function bindHold(button,dir){
+    const press=e=>{e.preventDefault();button.setPointerCapture?.(e.pointerId);buttons[dir]=true;button.classList.add('pressed');unlockAudio();if(navigator.vibrate)navigator.vibrate(12);};
+    const release=e=>{e?.preventDefault?.();buttons[dir]=false;button.classList.remove('pressed');};
+    button.addEventListener('pointerdown',press);button.addEventListener('pointerup',release);button.addEventListener('pointercancel',release);button.addEventListener('lostpointercapture',release);button.addEventListener('contextmenu',e=>e.preventDefault());
   }
+  function clearPressed(){ui.down.classList.remove('pressed');ui.up.classList.remove('pressed');}
+  bindHold(ui.down,'down');bindHold(ui.up,'up');
 
-  function emitImpact(x, y, type, count) {
-    for (let i = 0; i < count; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 40 + Math.random() * 250;
-      particles.push({
-        x,
-        y,
-        vx: Math.cos(a) * sp,
-        vy: Math.sin(a) * sp,
-        life: 0.2 + Math.random() * 0.75,
-        maxLife: 0.95,
-        size: 1 + Math.random() * 4,
-        type,
-      });
-    }
-  }
+  window.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['arrowup','arrowdown',' '].includes(k))e.preventDefault();if(k==='w')keys.w=true;if(k==='s')keys.s=true;if(k==='arrowup')keys.up=true;if(k==='arrowdown')keys.down=true;if(k==='p'&&!e.repeat)togglePause();});
+  window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='w')keys.w=false;if(k==='s')keys.s=false;if(k==='arrowup')keys.up=false;if(k==='arrowdown')keys.down=false;});
 
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
+  $('cpuBtn').addEventListener('click',()=>startGame('cpu'));
+  $('twoBtn').addEventListener('click',()=>startGame('two'));
+  $('pauseTopBtn').addEventListener('click',()=>togglePause());
+  $('resumeBtn').addEventListener('click',()=>togglePause(false));
+  $('restartBtn').addEventListener('click',()=>startGame(mode));
+  $('menuBtnPause').addEventListener('click',returnMenu);
+  $('rematchBtn').addEventListener('click',()=>startGame(mode));
+  $('menuBtn').addEventListener('click',returnMenu);
+  $('fullBtn').addEventListener('click',requestPortraitFullscreen);
 
-    const bg = ctx.createLinearGradient(0, 0, W, 0);
-    bg.addColorStop(0, "#031b2d");
-    bg.addColorStop(0.45, "#051121");
-    bg.addColorStop(0.55, "#07101e");
-    bg.addColorStop(1, "#151a28");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+  document.querySelectorAll('[data-difficulty]').forEach(btn=>btn.addEventListener('click',()=>{difficulty=btn.dataset.difficulty;document.querySelectorAll('[data-difficulty]').forEach(b=>b.classList.toggle('active',b===btn));}));
 
-    drawAmbient();
-    drawSideGlow();
-    drawCenterLine();
-    drawArenaBorder();
-    drawTrail();
-    drawParticles();
-    drawPaddle(leftPaddle, "lightning");
-    drawPaddle(rightPaddle, "wind");
-    drawBall();
+  ui.music.addEventListener('click',()=>{musicOn=!musicOn;ui.music.classList.toggle('active',musicOn);if(musicOn)startMusic();else stopMusic();ui.sound.textContent=(musicOn||sfxOn)?'🔊':'🔇';});
+  ui.sfx.addEventListener('click',()=>{sfxOn=!sfxOn;ui.sfx.classList.toggle('active',sfxOn);if(sfxOn)tone(680,.06,'sine',.025);ui.sound.textContent=(musicOn||sfxOn)?'🔊':'🔇';});
+  ui.sound.addEventListener('click',()=>{const on=!(musicOn||sfxOn);musicOn=sfxOn=on;ui.music.classList.toggle('active',on);ui.sfx.classList.toggle('active',on);ui.sound.textContent=on?'🔊':'🔇';if(on)startMusic();else stopMusic();});
 
-    if (waitingServe && running && !gameOver) {
-      ctx.save();
-      ctx.fillStyle = "rgba(224, 244, 255, 0.86)";
-      ctx.font = "800 18px system-ui";
-      ctx.textAlign = "center";
-      ctx.letterSpacing = "4px";
-      ctx.fillText("READY", W / 2, H / 2 - 32);
-      ctx.restore();
-    }
-  }
+  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;ui.install.classList.remove('hidden');});
+  ui.install.addEventListener('click',async()=>{if(!installPrompt)return;installPrompt.prompt();try{await installPrompt.userChoice;}catch{}installPrompt=null;ui.install.classList.add('hidden');});
+  window.addEventListener('appinstalled',()=>ui.install.classList.add('hidden'));
 
-  function drawAmbient() {
-    const now = performance.now() * 0.001;
-    for (const a of ambient) {
-      const alpha = clamp(a.a + Math.sin(now * 1.5 + a.tw) * 0.12, 0.04, 0.72);
-      ctx.fillStyle = `rgba(178, 230, 255, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&running&&!paused)togglePause(true);});
+  if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 
-  function drawSideGlow() {
-    const leftGlow = ctx.createRadialGradient(90, H / 2, 15, 90, H / 2, 380);
-    leftGlow.addColorStop(0, "rgba(0, 210, 255, 0.20)");
-    leftGlow.addColorStop(1, "rgba(0, 210, 255, 0)");
-    ctx.fillStyle = leftGlow;
-    ctx.fillRect(0, 0, W / 2, H);
-
-    const rightGlow = ctx.createRadialGradient(W - 90, H / 2, 15, W - 90, H / 2, 360);
-    rightGlow.addColorStop(0, "rgba(255, 255, 255, 0.12)");
-    rightGlow.addColorStop(1, "rgba(255, 255, 255, 0)");
-    ctx.fillStyle = rightGlow;
-    ctx.fillRect(W / 2, 0, W / 2, H);
-  }
-
-  function drawCenterLine() {
-    ctx.save();
-    ctx.strokeStyle = "rgba(170, 220, 255, 0.12)";
-    ctx.setLineDash([11, 14]);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(W / 2, 26);
-    ctx.lineTo(W / 2, H - 26);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawArenaBorder() {
-    ctx.save();
-    ctx.strokeStyle = "rgba(80, 220, 255, 0.18)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(18, 18, W - 36, H - 36);
-    ctx.restore();
-  }
-
-  function drawPaddle(paddle, type) {
-    const isLightning = type === "lightning";
-    ctx.save();
-    ctx.shadowBlur = isLightning ? 28 : 24;
-    ctx.shadowColor = isLightning ? "#20d8ff" : "#ffffff";
-
-    const g = ctx.createLinearGradient(
-      paddle.x,
-      paddle.y,
-      paddle.x + paddle.w,
-      paddle.y + paddle.h
-    );
-
-    if (isLightning) {
-      g.addColorStop(0, "#dfffff");
-      g.addColorStop(0.35, "#28e3ff");
-      g.addColorStop(1, "#0a8dff");
-    } else {
-      g.addColorStop(0, "#ffffff");
-      g.addColorStop(0.5, "#e6f5ff");
-      g.addColorStop(1, "#a9b8c9");
-    }
-
-    ctx.fillStyle = g;
-    roundRect(ctx, paddle.x, paddle.y, paddle.w, paddle.h, 9);
-    ctx.fill();
-
-    if (isLightning) {
-      ctx.strokeStyle = "rgba(227, 255, 255, 0.9)";
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      const sx = paddle.x + paddle.w / 2;
-      const sy = paddle.y + 12 + Math.random() * (paddle.h - 24);
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(sx - 7, sy + 10);
-      ctx.lineTo(sx + 5, sy + 17);
-      ctx.lineTo(sx - 3, sy + 28);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  function drawTrail() {
-    ctx.save();
-    for (let i = trail.length - 1; i >= 0; i--) {
-      const t = trail[i];
-      if (t.life <= 0) continue;
-      const alpha = t.life * (1 - i / trail.length) * 0.42;
-      const radius = ball.r * (0.25 + (1 - i / trail.length) * 0.75);
-      ctx.fillStyle = t.side === "lightning"
-        ? `rgba(37, 216, 255, ${alpha})`
-        : `rgba(240, 250, 255, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(t.x, t.y, radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  function drawBall() {
-    ctx.save();
-    ctx.shadowBlur = 30;
-    ctx.shadowColor = ball.vx >= 0 ? "#ffffff" : "#25d8ff";
-
-    const g = ctx.createRadialGradient(
-      ball.x - 3, ball.y - 3, 1,
-      ball.x, ball.y, ball.r * 1.3
-    );
-    g.addColorStop(0, "#ffffff");
-    g.addColorStop(0.45, "#eafcff");
-    g.addColorStop(1, ball.vx >= 0 ? "#9bb0c0" : "#16bfe8");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawParticles() {
-    ctx.save();
-    for (const p of particles) {
-      const alpha = clamp(p.life / p.maxLife, 0, 1);
-      ctx.fillStyle = p.type === "lightning"
-        ? `rgba(37, 220, 255, ${alpha})`
-        : `rgba(242, 249, 255, ${alpha * 0.9})`;
-      ctx.shadowBlur = p.type === "lightning" ? 12 : 7;
-      ctx.shadowColor = p.type === "lightning" ? "#19d6ff" : "#ffffff";
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  function roundRect(context, x, y, w, h, r) {
-    const radius = Math.min(r, w / 2, h / 2);
-    context.beginPath();
-    context.moveTo(x + radius, y);
-    context.arcTo(x + w, y, x + w, y + h, radius);
-    context.arcTo(x + w, y + h, x, y + h, radius);
-    context.arcTo(x, y + h, x, y, radius);
-    context.arcTo(x, y, x + w, y, radius);
-    context.closePath();
-  }
-
-  function loop(now) {
-    const rawDt = (now - lastTime) / 1000;
-    const dt = Math.min(rawDt, 0.025);
-    lastTime = now;
-
-    if (running && !paused && !gameOver) {
-      updatePaddles(dt);
-      updateBall(dt);
-    }
-
-    updateParticles(dt);
-
-    for (const a of ambient) {
-      a.y += a.vy * dt;
-      if (a.y < -3) {
-        a.y = H + 3;
-        a.x = Math.random() * W;
-      }
-    }
-
-    draw();
-    requestAnimationFrame(loop);
-  }
-
-  function unlockAudio() {
-    if (!audioCtx) {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (AudioContext) audioCtx = new AudioContext();
-    }
-    if (audioCtx?.state === "suspended") audioCtx.resume();
-  }
-
-  function playTone(freq, duration, type = "sine", volume = 0.03, delay = 0) {
-    if (!soundEnabled) return;
-    unlockAudio();
-    if (!audioCtx) return;
-
-    const start = audioCtx.currentTime + delay;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, start);
-
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(start);
-    osc.stop(start + duration + 0.02);
-  }
-
-  function playScoreJingle(lightningScored) {
-    const base = lightningScored ? 540 : 420;
-    playTone(base, 0.08, "triangle", 0.035, 0);
-    playTone(base * 1.35, 0.1, "sine", 0.03, 0.07);
-  }
-
-  function playVictoryJingle(lightningWon) {
-    const base = lightningWon ? 440 : 350;
-    [1, 1.25, 1.5, 2].forEach((m, i) => {
-      playTone(base * m, 0.16, lightningWon ? "square" : "sine", 0.035, i * 0.12);
-    });
-  }
-
-  function canvasPointFromEvent(clientX, clientY) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (clientX - rect.left) * (W / rect.width),
-      y: (clientY - rect.top) * (H / rect.height),
-    };
-  }
-
-  function updateTouchTarget(clientX, clientY) {
-    const p = canvasPointFromEvent(clientX, clientY);
-    if (p.x < W / 2) {
-      touchTargets.left = clamp(p.y, 0, H);
-    } else if (mode === "two") {
-      touchTargets.right = clamp(p.y, 0, H);
-    }
-  }
-
-  window.addEventListener("keydown", (e) => {
-    const key = e.key.toLowerCase();
-
-    if (["arrowup", "arrowdown", " "].includes(key)) e.preventDefault();
-
-    if (key === "w") keys.w = true;
-    if (key === "s") keys.s = true;
-    if (key === "arrowup") keys.up = true;
-    if (key === "arrowdown") keys.down = true;
-
-    if (key === "p" && !e.repeat) togglePause();
-  });
-
-  window.addEventListener("keyup", (e) => {
-    const key = e.key.toLowerCase();
-    if (key === "w") keys.w = false;
-    if (key === "s") keys.s = false;
-    if (key === "arrowup") keys.up = false;
-    if (key === "arrowdown") keys.down = false;
-  });
-
-  canvas.addEventListener("pointerdown", (e) => {
-    canvas.setPointerCapture?.(e.pointerId);
-    updateTouchTarget(e.clientX, e.clientY);
-    unlockAudio();
-  });
-
-  canvas.addEventListener("pointermove", (e) => {
-    if (e.buttons || e.pointerType === "touch") {
-      updateTouchTarget(e.clientX, e.clientY);
-    }
-  });
-
-  canvas.addEventListener("pointerup", (e) => {
-    const p = canvasPointFromEvent(e.clientX, e.clientY);
-    if (p.x < W / 2) touchTargets.left = null;
-    else touchTargets.right = null;
-  });
-
-  canvas.addEventListener("pointercancel", () => {
-    touchTargets.left = null;
-    touchTargets.right = null;
-  });
-
-  ui.cpuModeBtn.addEventListener("click", () => startMatch("cpu"));
-  ui.twoModeBtn.addEventListener("click", () => startMatch("two"));
-  ui.resumeBtn.addEventListener("click", () => togglePause(false));
-  ui.pauseBtn.addEventListener("click", () => togglePause());
-  ui.restartBtn.addEventListener("click", restartMatch);
-  ui.rematchBtn.addEventListener("click", restartMatch);
-  ui.menuBtn.addEventListener("click", showMenu);
-
-  ui.difficultyButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      difficulty = btn.dataset.difficulty;
-      ui.difficultyButtons.forEach(b => b.classList.toggle("active", b === btn));
-    });
-  });
-
-  ui.soundBtn.addEventListener("click", () => {
-    soundEnabled = !soundEnabled;
-    ui.soundBtn.textContent = soundEnabled ? "🔊" : "🔇";
-    if (soundEnabled) playTone(660, 0.06, "sine", 0.025);
-  });
-
-  ui.fullscreenBtn.addEventListener("click", async () => {
-    try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen?.();
-      } else {
-        await document.exitFullscreen?.();
-      }
-    } catch {
-      // Alcuni browser mobili possono bloccare il fullscreen.
-    }
-  });
-
-  ui.resetStatsBtn.addEventListener("click", () => {
-    stats = { leftWins: 0, rightWins: 0 };
-    saveStats();
-  });
-
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden && running && !paused) togglePause(true);
-  });
-
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(() => {});
-    });
-  }
-
-  initAmbient();
-  resetPaddles();
-  draw();
-  requestAnimationFrame(loop);
+  resetPaddles();draw();requestAnimationFrame(loop);
 })();

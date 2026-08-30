@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Lightning vs Wind Pong",
   "short_name": "LW Pong",
-  "description": "Pong arcade futuristico Lightning vs Wind",
+  "description": "Lightning vs Wind Pong - arcade portrait full screen.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

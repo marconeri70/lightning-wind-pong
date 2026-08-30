@@ -1,15 +1,14 @@
-# Lightning vs Wind Pong V2
+# Lightning vs Wind Pong V3
 
-Novità:
-- layout verticale 3:4 per smartphone;
-- fullscreen dal pulsante e tentativo automatico all'avvio del match;
-- PWA installabile;
-- manifest con display fullscreen e portrait-primary;
-- icone 192x192 e 512x512;
-- Service Worker per uso offline;
-- pulsante Installa quando il browser espone il prompt;
-- musica elettronica generata con Web Audio API;
-- effetti sonori separati;
-- 1 giocatore vs CPU e 2 giocatori sullo stesso dispositivo.
+Versione mobile portrait full-screen.
 
-Per GitHub Pages: caricare tutti i file nella root del repository e attivare Settings > Pages > Deploy from a branch > main > /(root).
+## Novità
+- layout bloccato a tutta altezza del telefono, senza scrolling
+- orientamento portrait
+- PWA con display fullscreen
+- pulsante sinistro `↓ GIÙ` per muovere Lightning verso il basso
+- pulsante destro `↑ SU` per muovere Lightning verso l'alto
+- movimento continuo mentre il pulsante resta premuto
+- vibrazione breve al tocco, quando supportata
+- pulsante pausa spostato in alto per lasciare più spazio al campo
+- audio, musica, effetti e installazione PWA
