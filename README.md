@@ -56,5 +56,7 @@ Poi carica/aggiorna i file del frontend su GitHub Pages.
 
 
 ## V5.1
+
+Cloudflare multiplayer build enabled
 - Worker name aligned to Cloudflare project: `lightning-wind-pong`
 - Multiplayer URL already configured: `https://lightning-wind-pong.vocidicassino.workers.dev`
