@@ -59,31 +59,50 @@
   let musicStep = 0;
   let deferredInstallPrompt = null;
 
-  // Multiplayer state
+  // Multiplayer V6 LOW LATENCY
+  // Lightning è l'host autorevole: simula la partita localmente a 60 fps.
+  // Cloudflare non simula più la fisica: inoltra soltanto input e snapshot.
   let ws = null;
   let roomCode = "";
   let onlineRole = null;
   let onlinePlayers = { lightning: false, wind: false };
-  let onlineState = null;
+  let onlineState = { status: "waiting", paused: false, startAt: 0 };
   let onlineInput = 0;
+  let peerInput = 0;
   let manualDisconnect = false;
   let reconnectTimer = null;
   let shareUrl = "";
-  // Ultimo stato autorevole ricevuto da Cloudflare.
-  // Il rendering non salta più direttamente da un pacchetto al successivo:
-  // tra due pacchetti il client predice/interpola a 60 fps.
+  let onlineStartAt = 0;
+  let onlineServeAt = 0;
+  let onlineWinner = null;
+  let snapshotSeq = 0;
+  let lastSnapshotSent = 0;
+  let lastRemoteSeq = -1;
+  let rttMs = 60;
+  let pingTimer = null;
+  let lastPingPerf = 0;
+
   const remote = {
+    hasSnapshot: false,
+    receivedAt: performance.now(),
+    sentAt: 0,
     leftY: left.y,
     rightY: right.y,
+    prevLeftY: left.y,
+    prevRightY: right.y,
     leftVy: 0,
     rightVy: 0,
     ballX: ball.x,
     ballY: ball.y,
     ballVx: 0,
     ballVy: 0,
-    receivedAt: performance.now(),
-    lastServerTime: 0,
-    hasState: false
+    scoreLeft: 0,
+    scoreRight: 0,
+    status: "waiting",
+    paused: false,
+    winner: null,
+    startAt: 0,
+    serveAt: 0
   };
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -249,253 +268,561 @@
     }
   }
 
-  // Multiplayer
+  // Multiplayer V6: host-authoritative + Cloudflare relay
   function openOnlineMenu() {
-    mode = "online-menu"; running = false; paused = false; gameOver = false; stopMusic();
+    mode = "online-menu";
+    running = false;
+    paused = false;
+    gameOver = false;
+    stopMusic();
     showOnly(ui.onlineOverlay);
-    ui.onlineSetup.classList.remove("hidden"); ui.onlineLobby.classList.add("hidden");
+    ui.onlineSetup.classList.remove("hidden");
+    ui.onlineLobby.classList.add("hidden");
     ui.onlineConfigHint.textContent = WORKER_CONFIGURED
-      ? "Cloudflare pronto. Crea una stanza o inserisci il codice dell'altro telefono."
+      ? "Modalità LOW LATENCY pronta. Lightning farà da host a 60 fps."
       : "Worker Cloudflare non configurato.";
     setBadge("ONLINE", "waiting");
   }
+
   function connectRoom(code) {
     code = normalizeCode(code);
-    if (!WORKER_CONFIGURED) { ui.onlineConfigHint.textContent = "Worker Cloudflare non configurato."; return; }
-    if (code.length !== 6) { ui.onlineConfigHint.textContent = "Il codice stanza deve avere 6 caratteri."; return; }
+    if (!WORKER_CONFIGURED) {
+      ui.onlineConfigHint.textContent = "Worker Cloudflare non configurato.";
+      return;
+    }
+    if (code.length !== 6) {
+      ui.onlineConfigHint.textContent = "Il codice stanza deve avere 6 caratteri.";
+      return;
+    }
 
-    // FIX V5.2: da questo momento siamo davvero in modalità online.
-    mode = "online";
     disconnectOnline(true);
     mode = "online";
     manualDisconnect = false;
-    roomCode = code; onlineRole = null; onlineState = null; onlinePlayers = { lightning: false, wind: false };
-    remote.hasState = false; onlineInput = 0;
+    roomCode = code;
+    onlineRole = null;
+    onlinePlayers = { lightning: false, wind: false };
+    onlineState = { status: "waiting", paused: false, startAt: 0 };
+    onlineInput = 0;
+    peerInput = 0;
+    onlineWinner = null;
+    remote.hasSnapshot = false;
+    lastRemoteSeq = -1;
+
     ui.roomCodeDisplay.textContent = code;
-    ui.onlineSetup.classList.add("hidden"); ui.onlineLobby.classList.remove("hidden");
+    ui.onlineSetup.classList.add("hidden");
+    ui.onlineLobby.classList.remove("hidden");
     updateLobby();
     shareUrl = `${location.origin}${location.pathname}?room=${encodeURIComponent(code)}`;
 
-    try { ws = new WebSocket(workerWsUrl(code)); }
-    catch { ui.lobbyMessage.textContent = "Impossibile aprire il WebSocket."; return; }
+    try {
+      ws = new WebSocket(workerWsUrl(code));
+    } catch {
+      ui.lobbyMessage.textContent = "Impossibile aprire il WebSocket.";
+      return;
+    }
 
     ws.addEventListener("open", () => {
       mode = "online";
       setBadge(`ROOM ${code}`, "online");
-      ui.lobbyMessage.textContent = "Connesso. In attesa dell'altro giocatore...";
+      ui.lobbyMessage.textContent = "Connesso. In attesa dell'altro telefono...";
+      beginPingLoop();
     });
+
     ws.addEventListener("message", (event) => {
-      let msg; try { msg = JSON.parse(event.data); } catch { return; }
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
       handleOnlineMessage(msg);
     });
+
     ws.addEventListener("close", () => {
+      stopPingLoop();
       if (manualDisconnect) return;
-      running = false; stopMusic(); setBadge("DISCONNESSO", "waiting");
+      running = false;
+      stopMusic();
+      setBadge("DISCONNESSO", "waiting");
       clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(() => connectRoom(roomCode), 1400);
+      reconnectTimer = setTimeout(() => connectRoom(roomCode), 1200);
     });
   }
+
+  function beginPingLoop() {
+    stopPingLoop();
+    const ping = () => {
+      if (ws?.readyState !== WebSocket.OPEN) return;
+      lastPingPerf = performance.now();
+      sendOnline({ type: "ping", id: lastPingPerf });
+    };
+    ping();
+    pingTimer = setInterval(ping, 1600);
+  }
+
+  function stopPingLoop() {
+    if (pingTimer) {
+      clearInterval(pingTimer);
+      pingTimer = null;
+    }
+  }
+
   function handleOnlineMessage(msg) {
     if (msg.type === "welcome") {
-      mode = "online";
       onlineRole = msg.role;
-      ui.roleMessage.textContent = onlineRole === "lightning" ? "⚡ TU SEI LIGHTNING" : "🌪 TU SEI WIND";
+      ui.roleMessage.textContent = onlineRole === "lightning"
+        ? "⚡ TU SEI LIGHTNING · HOST"
+        : "🌪 TU SEI WIND · CLIENT";
       ui.roleBadge.textContent = ui.roleMessage.textContent;
-      updateLobby(); return;
+      updateLobby();
+      return;
     }
-    if (msg.type === "players") { onlinePlayers = msg.players || onlinePlayers; updateLobby(); return; }
-    if (msg.type === "impact") { impact(msg.side, msg.x, msg.y); return; }
-    if (msg.type !== "state") return;
 
+    if (msg.type === "players") {
+      onlinePlayers = msg.players || onlinePlayers;
+      updateLobby();
+      if (!onlinePlayers.lightning || !onlinePlayers.wind) {
+        onlineState.status = "waiting";
+        running = false;
+        showOnly(ui.onlineOverlay);
+        ui.onlineSetup.classList.add("hidden");
+        ui.onlineLobby.classList.remove("hidden");
+      }
+      return;
+    }
+
+    if (msg.type === "start") {
+      startOnlineMatch(Number(msg.startAt || Date.now() + 900), Number(msg.matchId || 0));
+      return;
+    }
+
+    if (msg.type === "peer_input") {
+      if (onlineRole === "lightning" && msg.role === "wind") {
+        peerInput = clamp(Number(msg.dir) || 0, -1, 1);
+        // La posizione riportata dal client aiuta l'host a ridurre il ritardo
+        // senza trasformare il movimento in una sequenza di scatti.
+        const peerY = Number(msg.y);
+        if (Number.isFinite(peerY)) {
+          right.y += (clamp(peerY, 18, H - right.h - 18) - right.y) * 0.35;
+        }
+      }
+      return;
+    }
+
+    if (msg.type === "snapshot") {
+      if (onlineRole === "wind") receiveHostSnapshot(msg);
+      return;
+    }
+
+    if (msg.type === "impact") {
+      impact(msg.side, msg.x, msg.y);
+      return;
+    }
+
+    if (msg.type === "pause_request") {
+      if (onlineRole === "lightning") hostTogglePause();
+      return;
+    }
+
+    if (msg.type === "pong") {
+      const measured = performance.now() - Number(msg.id || lastPingPerf);
+      if (Number.isFinite(measured) && measured > 0 && measured < 2000) {
+        rttMs = rttMs * 0.72 + measured * 0.28;
+      }
+      return;
+    }
+
+    if (msg.type === "peer_left") {
+      running = false;
+      stopMusic();
+      showOnly(ui.onlineOverlay);
+      ui.onlineSetup.classList.add("hidden");
+      ui.onlineLobby.classList.remove("hidden");
+      ui.lobbyMessage.textContent = "L'altro giocatore si è disconnesso.";
+    }
+  }
+
+  function startOnlineMatch(startAt, matchId) {
     mode = "online";
-    onlineState = msg.state || {};
-    leftScore = Number(onlineState.score?.lightning || 0);
-    rightScore = Number(onlineState.score?.wind || 0);
+    running = true;
+    paused = false;
+    gameOver = false;
+    onlineWinner = null;
+    onlineState = { status: "countdown", paused: false, startAt };
+    onlineStartAt = startAt;
+    onlineServeAt = startAt;
+    leftScore = 0;
+    rightScore = 0;
+    updateScore();
+    resetPaddles();
+    ball.x = W / 2;
+    ball.y = H / 2;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.speed = 470;
+    trail.length = 0;
+    remote.hasSnapshot = false;
+    lastRemoteSeq = -1;
+    snapshotSeq = 0;
+    lastSnapshotSent = 0;
+    peerInput = 0;
+    showOnly(null);
+    startMusic();
+    requestGameFullscreen();
+    ui.matchLabel.textContent = `ROOM ${roomCode} · LOW LATENCY`;
+    setBadge(`ROOM ${roomCode}`, "online");
+  }
+
+  function launchHostServe(direction = Math.random() > 0.5 ? 1 : -1) {
+    ball.speed = 470;
+    const a = Math.random() * 0.78 - 0.39;
+    ball.vx = Math.cos(a) * ball.speed * direction;
+    ball.vy = Math.sin(a) * ball.speed;
+    onlineServeAt = 0;
+    onlineState.status = "playing";
+  }
+
+  function hostReflect(p, side) {
+    const center = p.y + p.h / 2;
+    const off = clamp((ball.y - center) / (p.h / 2), -1, 1);
+    ball.speed = Math.min(Math.hypot(ball.vx, ball.vy) + 36, ball.maxSpeed);
+    const dir = side === "lightning" ? 1 : -1;
+    ball.vx = Math.cos(off * 1.04) * ball.speed * dir;
+    ball.vy = Math.sin(off * 1.04) * ball.speed;
+    impact(side, ball.x, ball.y);
+    sendOnline({ type: "impact", side, x: ball.x, y: ball.y });
+    tone(side === "lightning" ? 760 : 610, 0.045, "sine", 0.03);
+  }
+
+  function hostHit(p, side) {
+    if (ball.y + ball.r < p.y || ball.y - ball.r > p.y + p.h) return;
+    if (side === "lightning" && ball.vx < 0 &&
+        ball.x - ball.r <= p.x + p.w && ball.x + ball.r >= p.x) {
+      ball.x = p.x + p.w + ball.r;
+      hostReflect(p, side);
+    }
+    if (side === "wind" && ball.vx > 0 &&
+        ball.x + ball.r >= p.x && ball.x - ball.r <= p.x + p.w) {
+      ball.x = p.x - ball.r;
+      hostReflect(p, side);
+    }
+  }
+
+  function hostPoint(side) {
+    if (side === "lightning") leftScore++;
+    else rightScore++;
     updateScore();
 
-    // Timestamp del pacchetto: preferiamo quello del server; se il Worker
-    // non è ancora aggiornato usiamo comunque il tempo di ricezione locale.
-    const recvNow = performance.now();
-    const serverNow = Number(msg.serverTime || Date.now());
-    const sampleDt = remote.hasState
-      ? clamp(
-          remote.lastServerTime > 0
-            ? (serverNow - remote.lastServerTime) / 1000
-            : (recvNow - remote.receivedAt) / 1000,
-          0.008,
-          0.12
-        )
+    if (leftScore >= WIN_SCORE || rightScore >= WIN_SCORE) {
+      onlineWinner = leftScore > rightScore ? "lightning" : "wind";
+      onlineState.status = "gameover";
+      running = false;
+      gameOver = true;
+      ball.vx = 0;
+      ball.vy = 0;
+      sendHostSnapshot(true);
+      stopMusic();
+      showOnlineGameOver(onlineWinner);
+      return;
+    }
+
+    ball.x = W / 2;
+    ball.y = H / 2;
+    ball.vx = 0;
+    ball.vy = 0;
+    trail.length = 0;
+    onlineServeAt = Date.now() + 520;
+    onlineState.status = "serve";
+  }
+
+  function updateHostOnline(dt, now) {
+    if (!running || gameOver) return;
+
+    // Entrambe le racchette sono simulate a 60 fps sull'host.
+    left.y += onlineInput * left.speed * dt;
+    right.y += peerInput * right.speed * dt;
+    left.y = clamp(left.y, 18, H - left.h - 18);
+    right.y = clamp(right.y, 18, H - right.h - 18);
+
+    if (paused) {
+      sendHostSnapshot(false, now);
+      return;
+    }
+
+    const wallNow = Date.now();
+    if (onlineState.status === "countdown") {
+      if (wallNow >= onlineStartAt) {
+        launchHostServe();
+      }
+      sendHostSnapshot(false, now);
+      return;
+    }
+
+    if (onlineServeAt && wallNow >= onlineServeAt) {
+      launchHostServe(Math.random() > 0.5 ? 1 : -1);
+    }
+
+    if (onlineState.status === "playing") {
+      const steps = clamp(Math.ceil(Math.max(Math.abs(ball.vx), Math.abs(ball.vy)) * dt / 9), 1, 10);
+      const sub = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        ball.x += ball.vx * sub;
+        ball.y += ball.vy * sub;
+
+        if (ball.y <= 30 && ball.vy < 0) {
+          ball.y = 30;
+          ball.vy *= -1;
+        }
+        if (ball.y >= H - 30 && ball.vy > 0) {
+          ball.y = H - 30;
+          ball.vy *= -1;
+        }
+
+        hostHit(left, "lightning");
+        hostHit(right, "wind");
+
+        if (ball.x < -45) {
+          hostPoint("wind");
+          break;
+        }
+        if (ball.x > W + 45) {
+          hostPoint("lightning");
+          break;
+        }
+      }
+    }
+
+    sendHostSnapshot(false, now);
+  }
+
+  function sendHostSnapshot(force = false, perfNow = performance.now()) {
+    if (onlineRole !== "lightning" || ws?.readyState !== WebSocket.OPEN) return;
+    // 30 snapshot/s sono sufficienti: la fisica e il rendering restano a 60 fps.
+    if (!force && perfNow - lastSnapshotSent < 32) return;
+    lastSnapshotSent = perfNow;
+
+    sendOnline({
+      type: "snapshot",
+      seq: ++snapshotSeq,
+      sentAt: Date.now(),
+      state: {
+        status: onlineState.status,
+        paused,
+        startAt: onlineStartAt,
+        serveAt: onlineServeAt,
+        winner: onlineWinner,
+        paddles: { lightningY: left.y, windY: right.y },
+        ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
+        score: { lightning: leftScore, wind: rightScore }
+      }
+    });
+  }
+
+  function receiveHostSnapshot(msg) {
+    const seq = Number(msg.seq || 0);
+    if (seq <= lastRemoteSeq) return;
+    lastRemoteSeq = seq;
+
+    const s = msg.state || {};
+    const now = performance.now();
+    const prevReceivedAt = remote.receivedAt;
+    const dtSample = remote.hasSnapshot
+      ? clamp((now - prevReceivedAt) / 1000, 0.016, 0.12)
       : 0;
 
-    if (onlineState.paddles) {
-      const nextLeftY = Number(onlineState.paddles.lightningY ?? remote.leftY);
-      const nextRightY = Number(onlineState.paddles.windY ?? remote.rightY);
+    remote.prevLeftY = remote.leftY;
+    remote.prevRightY = remote.rightY;
+    remote.leftY = Number(s.paddles?.lightningY ?? remote.leftY);
+    remote.rightY = Number(s.paddles?.windY ?? remote.rightY);
 
-      if (sampleDt > 0) {
-        remote.leftVy = clamp((nextLeftY - remote.leftY) / sampleDt, -left.speed * 1.15, left.speed * 1.15);
-        remote.rightVy = clamp((nextRightY - remote.rightY) / sampleDt, -right.speed * 1.15, right.speed * 1.15);
-      }
-
-      remote.leftY = nextLeftY;
-      remote.rightY = nextRightY;
+    if (dtSample > 0) {
+      remote.leftVy = clamp((remote.leftY - remote.prevLeftY) / dtSample, -left.speed * 1.25, left.speed * 1.25);
+      remote.rightVy = clamp((remote.rightY - remote.prevRightY) / dtSample, -right.speed * 1.25, right.speed * 1.25);
     }
 
-    if (onlineState.ball) {
-      remote.ballX = Number(onlineState.ball.x ?? remote.ballX);
-      remote.ballY = Number(onlineState.ball.y ?? remote.ballY);
-      remote.ballVx = Number(onlineState.ball.vx || 0);
-      remote.ballVy = Number(onlineState.ball.vy || 0);
-    }
+    remote.ballX = Number(s.ball?.x ?? remote.ballX);
+    remote.ballY = Number(s.ball?.y ?? remote.ballY);
+    remote.ballVx = Number(s.ball?.vx || 0);
+    remote.ballVy = Number(s.ball?.vy || 0);
+    remote.receivedAt = now;
+    remote.sentAt = Number(msg.sentAt || Date.now());
+    remote.scoreLeft = Number(s.score?.lightning || 0);
+    remote.scoreRight = Number(s.score?.wind || 0);
+    remote.status = s.status || "playing";
+    remote.paused = !!s.paused;
+    remote.winner = s.winner || null;
+    remote.startAt = Number(s.startAt || 0);
+    remote.serveAt = Number(s.serveAt || 0);
 
-    remote.receivedAt = recvNow;
-    remote.lastServerTime = serverNow;
+    leftScore = remote.scoreLeft;
+    rightScore = remote.scoreRight;
+    updateScore();
 
-    // Al primo pacchetto facciamo uno snap iniziale. Da quel momento in poi
-    // il rendering usa predizione + correzione morbida.
-    if (!remote.hasState && onlineState.ball) {
+    if (!remote.hasSnapshot) {
       left.y = remote.leftY;
-      right.y = remote.rightY;
+      // WIND mantiene subito la propria posizione locale; non facciamo snap
+      // della racchetta controllata dal giocatore.
       ball.x = remote.ballX;
       ball.y = remote.ballY;
       ball.vx = remote.ballVx;
       ball.vy = remote.ballVy;
-      remote.hasState = true;
+      remote.hasSnapshot = true;
     }
 
-    if (onlineState.status === "playing" || onlineState.status === "countdown") {
-      gameOver = false; paused = !!onlineState.paused;
-      if (!running) {
-        running = true; showOnly(null); startMusic(); requestGameFullscreen();
+    onlineState.status = remote.status;
+    paused = remote.paused;
+
+    if (remote.status === "gameover" && !gameOver) {
+      onlineWinner = remote.winner;
+      gameOver = true;
+      running = false;
+      stopMusic();
+      showOnlineGameOver(onlineWinner);
+    }
+
+    ui.pauseOverlay.classList.toggle("show", paused && !gameOver);
+  }
+
+  function updateWindClient(dt) {
+    if (!remote.hasSnapshot) return;
+
+    // RACCHETTA WIND: risposta completamente locale a 60 fps.
+    right.y += onlineInput * right.speed * dt;
+    right.y = clamp(right.y, 18, H - right.h - 18);
+
+    // Correggiamo verso l'host solo quando il dito è fermo; durante il movimento
+    // nessun round-trip deve rallentare la racchetta.
+    if (onlineInput === 0) {
+      right.y += (remote.rightY - right.y) * (1 - Math.exp(-4.5 * dt));
+    }
+
+    // Racchetta avversaria: estrapolazione breve.
+    const sinceReceive = clamp((performance.now() - remote.receivedAt) / 1000, 0, 0.12);
+    const networkLead = clamp((rttMs * 0.5) / 1000, 0.01, 0.09);
+    const lead = clamp(sinceReceive + networkLead, 0, 0.14);
+    const targetLeft = clamp(remote.leftY + remote.leftVy * lead, 18, H - left.h - 18);
+    left.y += (targetLeft - left.y) * (1 - Math.exp(-22 * dt));
+
+    if (!remote.paused && remote.status === "playing") {
+      // Pallina: extrapolazione per compensare circa metà RTT.
+      const targetX = remote.ballX + remote.ballVx * lead;
+      let targetY = remote.ballY + remote.ballVy * lead;
+      const top = 30, bottom = H - 30;
+      let guard = 0;
+      while ((targetY < top || targetY > bottom) && guard++ < 4) {
+        if (targetY < top) targetY = top + (top - targetY);
+        if (targetY > bottom) targetY = bottom - (targetY - bottom);
       }
-      ui.matchLabel.textContent = `ROOM ${roomCode} · FIRST TO 10`;
-      updateCountdown();
-    } else if (onlineState.status === "gameover") {
-      running = false; gameOver = true; stopMusic();
-      const l = onlineState.winner === "lightning";
-      ui.winnerText.textContent = l ? "⚡ LIGHTNING VINCE!" : "🌪 WIND VINCE!";
-      ui.finalScoreText.textContent = `${leftScore} — ${rightScore}`;
-      ui.gameOverOverlay.classList.add("show");
-    } else if (onlineState.status === "waiting") {
-      running = false; showOnly(ui.onlineOverlay);
-      ui.onlineSetup.classList.add("hidden"); ui.onlineLobby.classList.remove("hidden");
-      ui.lobbyMessage.textContent = "In attesa del secondo telefono.";
-    }
-  }
-  function updateLobby() {
-    const l = !!onlinePlayers.lightning, w = !!onlinePlayers.wind;
-    ui.lightningStatus.textContent = l ? "CONNESSO" : "IN ATTESA";
-    ui.windStatus.textContent = w ? "CONNESSO" : "IN ATTESA";
-    ui.lightningStatus.classList.toggle("connected", l);
-    ui.windStatus.classList.toggle("connected", w);
-    if (onlineRole) ui.roleMessage.textContent = onlineRole === "lightning" ? "⚡ TU SEI LIGHTNING" : "🌪 TU SEI WIND";
-    if (l && w) ui.lobbyMessage.textContent = "Entrambi connessi. La partita sta iniziando...";
-  }
-  function updateCountdown() {
-    const startAt = Number(onlineState?.startAt || 0);
-    if (onlineState?.status === "countdown" && startAt > Date.now()) {
-      ui.countdown.textContent = Math.max(1, Math.ceil((startAt - Date.now()) / 1000));
-      ui.countdown.classList.remove("hidden");
-    } else ui.countdown.classList.add("hidden");
-  }
-  function sendOnline(payload) {
-    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
-  }
-  function setOnlineInput(dir) {
-    if (mode !== "online" || !onlineRole) return;
-    dir = clamp(Number(dir) || 0, -1, 1);
-    if (dir === onlineInput) return;
-    onlineInput = dir;
-    sendOnline({ type: "input", dir });
-  }
-  function disconnectOnline(manual = false) {
-    manualDisconnect = manual;
-    clearTimeout(reconnectTimer); reconnectTimer = null;
-    if (ws) { try { ws.close(1000, "leave"); } catch {} ws = null; }
-    onlineRole = null; onlineState = null; onlinePlayers = { lightning: false, wind: false }; onlineInput = 0;
-    remote.hasState = false;
-    remote.leftVy = remote.rightVy = 0;
-    remote.ballVx = remote.ballVy = 0;
-  }
-  function predictedBallTarget(age) {
-    let x = remote.ballX + remote.ballVx * age;
-    let y = remote.ballY + remote.ballVy * age;
 
-    // Durante la breve estrapolazione simuliamo anche il rimbalzo sui bordi
-    // superiore/inferiore, così la pallina non "entra" nel muro tra due pacchetti.
-    const top = 30;
-    const bottom = H - 30;
-    let guard = 0;
-    while ((y < top || y > bottom) && guard++ < 4) {
-      if (y < top) y = top + (top - y);
-      if (y > bottom) y = bottom - (y - bottom);
-    }
-    return { x, y };
-  }
-
-  function updateOnlineVisuals(dt) {
-    if (!remote.hasState) return;
-
-    const isPaused = !!onlineState?.paused;
-    const isCountdown = onlineState?.status === "countdown";
-    const age = (isPaused || isCountdown)
-      ? 0
-      : clamp((performance.now() - remote.receivedAt) / 1000, 0, 0.085);
-
-    const targetLeft = clamp(remote.leftY + remote.leftVy * age, 18, H - left.h - 18);
-    const targetRight = clamp(remote.rightY + remote.rightVy * age, 18, H - right.h - 18);
-
-    // PREDIZIONE LOCALE DELLA PROPRIA RACCHETTA:
-    // la racchetta reagisce subito al dito, senza aspettare il viaggio
-    // telefono -> Cloudflare -> telefono.
-    const ownDir = buttonDirection;
-    if (!isPaused && onlineRole === "lightning") {
-      left.y = clamp(left.y + ownDir * left.speed * dt, 18, H - left.h - 18);
-      // correzione dolce verso lo stato autorevole del server
-      left.y += (targetLeft - left.y) * (1 - Math.exp(-5.5 * dt));
-    } else {
-      left.y += (targetLeft - left.y) * (1 - Math.exp(-18 * dt));
-    }
-
-    if (!isPaused && onlineRole === "wind") {
-      right.y = clamp(right.y + ownDir * right.speed * dt, 18, H - right.h - 18);
-      right.y += (targetRight - right.y) * (1 - Math.exp(-5.5 * dt));
-    } else {
-      right.y += (targetRight - right.y) * (1 - Math.exp(-18 * dt));
-    }
-
-    // PALLINA A 60 FPS:
-    // continuiamo il moto usando l'ultima velocità ricevuta e poi
-    // riconciliamo gradualmente con la posizione server prevista.
-    if (!isPaused && !isCountdown) {
+      // Simulazione locale a 60 fps + riconciliazione rapida ma continua.
       ball.x += ball.vx * dt;
       ball.y += ball.vy * dt;
-
-      if (ball.y < 30 && ball.vy < 0) {
-        ball.y = 30 + (30 - ball.y);
-        ball.vy *= -1;
-      } else if (ball.y > H - 30 && ball.vy > 0) {
-        ball.y = (H - 30) - (ball.y - (H - 30));
+      if (ball.y <= top && ball.vy < 0) {
+        ball.y = top + (top - ball.y);
         ball.vy *= -1;
       }
-    }
+      if (ball.y >= bottom && ball.vy > 0) {
+        ball.y = bottom - (ball.y - bottom);
+        ball.vy *= -1;
+      }
 
-    const targetBall = predictedBallTarget(age);
-    const ballCorrection = 1 - Math.exp(-13 * dt);
-    ball.x += (targetBall.x - ball.x) * ballCorrection;
-    ball.y += (targetBall.y - ball.y) * ballCorrection;
-
-    // La velocità server resta la sorgente autorevole, ma viene aggiornata
-    // senza bloccare il rendering tra un pacchetto e l'altro.
-    if (!isPaused && !isCountdown) {
-      ball.vx += (remote.ballVx - ball.vx) * (1 - Math.exp(-20 * dt));
-      ball.vy += (remote.ballVy - ball.vy) * (1 - Math.exp(-20 * dt));
+      const corr = 1 - Math.exp(-17 * dt);
+      ball.x += (targetX - ball.x) * corr;
+      ball.y += (targetY - ball.y) * corr;
+      ball.vx += (remote.ballVx - ball.vx) * (1 - Math.exp(-25 * dt));
+      ball.vy += (remote.ballVy - ball.vy) * (1 - Math.exp(-25 * dt));
     } else {
+      ball.x += (remote.ballX - ball.x) * (1 - Math.exp(-24 * dt));
+      ball.y += (remote.ballY - ball.y) * (1 - Math.exp(-24 * dt));
       ball.vx = remote.ballVx;
       ball.vy = remote.ballVy;
     }
 
     trail.unshift({ x: ball.x, y: ball.y, side: ball.vx >= 0 ? "wind" : "lightning" });
-    if (trail.length > 22) trail.pop();
+    if (trail.length > 24) trail.pop();
+  }
+
+  function showOnlineGameOver(winner) {
+    const l = winner === "lightning";
+    ui.winnerText.textContent = l ? "⚡ LIGHTNING VINCE!" : "🌪 WIND VINCE!";
+    ui.finalScoreText.textContent = `${leftScore} — ${rightScore}`;
+    ui.gameOverOverlay.classList.add("show");
+  }
+
+  function updateLobby() {
+    const l = !!onlinePlayers.lightning;
+    const w = !!onlinePlayers.wind;
+    ui.lightningStatus.textContent = l ? "CONNESSO" : "IN ATTESA";
+    ui.windStatus.textContent = w ? "CONNESSO" : "IN ATTESA";
+    ui.lightningStatus.classList.toggle("connected", l);
+    ui.windStatus.classList.toggle("connected", w);
+    if (onlineRole) {
+      ui.roleMessage.textContent = onlineRole === "lightning"
+        ? "⚡ TU SEI LIGHTNING · HOST"
+        : "🌪 TU SEI WIND · CLIENT";
+    }
+    if (l && w) ui.lobbyMessage.textContent = "Connessi. Avvio partita low-latency...";
+  }
+
+  function updateCountdown() {
+    const startAt = Number(onlineStartAt || remote.startAt || 0);
+    const status = onlineRole === "lightning" ? onlineState.status : remote.status;
+    if (status === "countdown" && startAt > Date.now()) {
+      ui.countdown.textContent = Math.max(1, Math.ceil((startAt - Date.now()) / 1000));
+      ui.countdown.classList.remove("hidden");
+    } else {
+      ui.countdown.classList.add("hidden");
+    }
+  }
+
+  function sendOnline(payload) {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(payload));
+    }
+  }
+
+  function setOnlineInput(dir) {
+    if (mode !== "online" || !onlineRole) return;
+    dir = clamp(Number(dir) || 0, -1, 1);
+    if (dir === onlineInput) return;
+    onlineInput = dir;
+
+    // Solo Wind deve inviare l'input all'host. Lightning è già l'host e non
+    // deve attendere nessun messaggio di rete per muovere la propria racchetta.
+    if (onlineRole === "wind") {
+      sendOnline({ type: "input", dir, y: right.y, sentAt: Date.now() });
+    }
+  }
+
+  function hostTogglePause() {
+    if (onlineRole !== "lightning" || gameOver) return;
+    paused = !paused;
+    onlineState.paused = paused;
+    ui.pauseOverlay.classList.toggle("show", paused);
+    if (paused) stopMusic();
+    else {
+      lastTime = performance.now();
+      startMusic();
+    }
+    sendHostSnapshot(true);
+  }
+
+  function disconnectOnline(manual = false) {
+    manualDisconnect = manual;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    stopPingLoop();
+    if (ws) {
+      try { ws.close(1000, "leave"); } catch {}
+      ws = null;
+    }
+    onlineRole = null;
+    onlinePlayers = { lightning: false, wind: false };
+    onlineInput = 0;
+    peerInput = 0;
+    remote.hasSnapshot = false;
+  }
+
+  function updateOnlineFrame(dt, now) {
+    updateCountdown();
+    if (onlineRole === "lightning") updateHostOnline(dt, now);
+    else if (onlineRole === "wind") updateWindClient(dt);
   }
 
   // Drawing
@@ -565,14 +892,15 @@
     const dt = Math.min((now - lastTime) / 1000, .025); lastTime = now;
     if (running && !gameOver) {
       if (mode === "cpu" || mode === "local") { if (!paused) updateLocal(dt); }
-      else if (mode === "online") { updateOnlineVisuals(dt); updateCountdown(); }
+      else if (mode === "online") { updateOnlineFrame(dt, now); }
     }
     updateParticles(dt); draw(now); requestAnimationFrame(loop);
   }
 
   // Controls
   function pressMove(dir) {
-    unlockAudio(); buttonDirection = dir;
+    unlockAudio();
+    buttonDirection = dir;
     if (mode === "online") setOnlineInput(dir);
     navigator.vibrate?.(10);
   }
@@ -621,7 +949,12 @@
   }));
 
   function togglePause(force) {
-    if (mode === "online") { if (running) sendOnline({ type: "pause" }); return; }
+    if (mode === "online") {
+      if (!running || gameOver) return;
+      if (onlineRole === "lightning") hostTogglePause();
+      else sendOnline({ type: "pause" });
+      return;
+    }
     if (!running || gameOver) return;
     paused = typeof force === "boolean" ? force : !paused;
     ui.pauseOverlay.classList.toggle("show", paused);
@@ -633,7 +966,10 @@
   $("pauseMenuBtn").addEventListener("click", goMenu);
   $("gameOverMenuBtn").addEventListener("click", goMenu);
   $("rematchBtn").addEventListener("click", () => {
-    if (mode === "online") { sendOnline({ type: "rematch" }); ui.gameOverOverlay.classList.remove("show"); }
+    if (mode === "online") {
+      sendOnline({ type: "rematch" });
+      ui.finalScoreText.textContent = "IN ATTESA DELL'ALTRO GIOCATORE...";
+    }
     else startLocal(mode);
   });
   function goMenu() {
