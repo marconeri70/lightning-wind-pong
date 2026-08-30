@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#07111f" />
+  <meta name="description" content="Lightning vs Wind Pong - web game arcade per desktop e smartphone." />
+  <title>Lightning vs Wind Pong</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">ARCADE DUEL</p>
+        <h1>LIGHTNING <span>VS</span> WIND PONG</h1>
+      </div>
+      <div class="top-actions">
+        <button id="soundBtn" class="icon-btn" type="button" aria-label="Attiva o disattiva audio">🔊</button>
+        <button id="fullscreenBtn" class="icon-btn" type="button" aria-label="Schermo intero">⛶</button>
+      </div>
+    </header>
+
+    <section class="score-strip" aria-label="Punteggio">
+      <div class="score-card lightning-card">
+        <span>LIGHTNING</span>
+        <strong id="leftScore">0</strong>
+      </div>
+
+      <div class="match-info">
+        <b>VS</b>
+        <small id="matchInfo">FIRST TO 10</small>
+      </div>
+
+      <div class="score-card wind-card">
+        <span>WIND</span>
+        <strong id="rightScore">0</strong>
+      </div>
+    </section>
+
+    <section class="arena-wrap">
+      <canvas id="gameCanvas" width="960" height="600" aria-label="Campo da gioco Lightning vs Wind Pong"></canvas>
+
+      <div id="startOverlay" class="overlay visible">
+        <div class="panel">
+          <p class="mini-title">LIGHTNING KINGDOM // WIND KINGDOM</p>
+          <h2>PRONTO ALLA SFIDA?</h2>
+          <p class="panel-copy">
+            Vinci il primo duello arrivando a 10 punti. La pallina accelera a ogni colpo.
+          </p>
+
+          <div class="mode-grid">
+            <button id="cpuModeBtn" class="mode-btn primary" type="button">
+              <span>⚡</span>
+              <b>1 GIOCATORE</b>
+              <small>Lightning vs CPU</small>
+            </button>
+            <button id="twoModeBtn" class="mode-btn" type="button">
+              <span>🌪️</span>
+              <b>2 GIOCATORI</b>
+              <small>Stesso dispositivo</small>
+            </button>
+          </div>
+
+          <div id="difficultyBox" class="difficulty-box">
+            <span>Difficoltà CPU</span>
+            <div class="segmented">
+              <button data-difficulty="easy" type="button">Facile</button>
+              <button data-difficulty="normal" class="active" type="button">Media</button>
+              <button data-difficulty="hard" type="button">Difficile</button>
+            </div>
+          </div>
+
+          <p class="controls-help">
+            PC: <b>W/S</b> per Lightning · <b>↑/↓</b> per Wind · <b>P</b> pausa<br />
+            Smartphone: trascina verticalmente nella metà sinistra o destra del campo.
+          </p>
+        </div>
+      </div>
+
+      <div id="pauseOverlay" class="overlay">
+        <div class="panel small-panel">
+          <p class="mini-title">MATCH IN PAUSA</p>
+          <h2>PAUSA</h2>
+          <button id="resumeBtn" class="mode-btn primary compact" type="button">RIPRENDI</button>
+          <button id="restartBtn" class="mode-btn compact" type="button">RICOMINCIA</button>
+        </div>
+      </div>
+
+      <div id="gameOverOverlay" class="overlay">
+        <div class="panel small-panel">
+          <p class="mini-title">DUELLO CONCLUSO</p>
+          <h2 id="winnerText">LIGHTNING VINCE!</h2>
+          <p id="finalScoreText" class="panel-copy">10 - 8</p>
+          <button id="rematchBtn" class="mode-btn primary compact" type="button">RIVINCITA</button>
+          <button id="menuBtn" class="mode-btn compact" type="button">MENU</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="bottom-bar">
+      <div class="control-chip lightning-chip">
+        <b>LIGHTNING PADDLE</b>
+        <span>W / S · TOUCH SINISTRA</span>
+      </div>
+      <button id="pauseBtn" class="pause-btn" type="button">⏸ PAUSA</button>
+      <div class="control-chip wind-chip">
+        <b>WIND PADDLE</b>
+        <span>↑ / ↓ · TOUCH DESTRA</span>
+      </div>
+    </section>
+
+    <section class="stats">
+      <span>Vittorie Lightning: <b id="leftWins">0</b></span>
+      <span>Vittorie Wind: <b id="rightWins">0</b></span>
+      <button id="resetStatsBtn" type="button">Azzera statistiche</button>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

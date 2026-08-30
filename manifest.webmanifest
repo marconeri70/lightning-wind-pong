@@ -1,0 +1,10 @@
+{
+  "name": "Lightning vs Wind Pong",
+  "short_name": "LW Pong",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#020713",
+  "theme_color": "#07111f",
+  "description": "Pong arcade futuristico Lightning vs Wind.",
+  "orientation": "landscape-primary"
+}
