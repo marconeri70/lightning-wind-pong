@@ -2,96 +2,167 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#020713">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="LW Pong">
-  <meta name="screen-orientation" content="portrait">
-  <meta name="description" content="Lightning vs Wind Pong - arcade game installabile e full screen.">
+  <meta name="description" content="Lightning vs Wind Pong - arcade multiplayer online">
+  <title>Lightning vs Wind Pong</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <title>Lightning vs Wind Pong</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main id="app" class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <span class="eyebrow">ARCADE DUEL</span>
-        <h1>LIGHTNING <i>VS</i> WIND PONG</h1>
-      </div>
-      <div class="top-actions">
-        <button id="installBtn" class="icon-btn hidden" type="button" aria-label="Installa app" title="Installa app">⬇</button>
-        <button id="soundBtn" class="icon-btn" type="button" aria-label="Audio" title="Audio">🔊</button>
-        <button id="fullBtn" class="icon-btn" type="button" aria-label="Schermo intero" title="Schermo intero">⛶</button>
-        <button id="pauseTopBtn" class="icon-btn" type="button" aria-label="Pausa" title="Pausa">⏸</button>
-      </div>
-    </header>
+<main class="game-app">
+  <header class="hud-top">
+    <div class="brand">
+      <p class="eyebrow">NEON STORM // ARCADE DUEL</p>
+      <h1>LIGHTNING <span>VS</span> WIND</h1>
+    </div>
+    <div class="top-buttons">
+      <button id="installBtn" class="hud-icon install-hidden" type="button" aria-label="Installa">⬇</button>
+      <button id="soundBtn" class="hud-icon" type="button" aria-label="Audio">🔊</button>
+      <button id="fullscreenBtn" class="hud-icon" type="button" aria-label="Schermo intero">⛶</button>
+      <button id="pauseBtn" class="hud-icon" type="button" aria-label="Pausa">⏸</button>
+    </div>
+  </header>
 
-    <section class="scorebar" aria-label="Punteggio">
-      <div class="score score-lightning"><span>LIGHTNING</span><strong id="leftScore">0</strong></div>
-      <div class="match"><b>VS</b><small id="matchInfo">FIRST TO 10</small></div>
-      <div class="score score-wind"><span>WIND</span><strong id="rightScore">0</strong></div>
-    </section>
+  <section class="score-hud">
+    <article class="score-box lightning-score">
+      <span>⚡ LIGHTNING</span>
+      <strong id="leftScore">0</strong>
+    </article>
+    <article class="center-hud">
+      <strong>VS</strong>
+      <small id="matchLabel">FIRST TO 10</small>
+      <span id="connectionBadge" class="connection-badge local">LOCAL</span>
+    </article>
+    <article class="score-box wind-score">
+      <span>WIND 🌪</span>
+      <strong id="rightScore">0</strong>
+    </article>
+  </section>
 
-    <section class="arena-shell">
-      <canvas id="gameCanvas" width="720" height="1120" aria-label="Campo di gioco"></canvas>
+  <section class="arena-shell">
+    <canvas id="gameCanvas" width="720" height="960" aria-label="Campo Lightning vs Wind"></canvas>
 
-      <div id="startOverlay" class="overlay show">
-        <div class="panel">
-          <div class="panel-kicker">PORTRAIT FULL SCREEN</div>
-          <h2>PRONTO?</h2>
-          <p>Il pulsante <b>↓ a sinistra</b> porta Lightning in basso; il pulsante <b>↑ a destra</b> la porta in alto.</p>
-          <div class="mode-row">
-            <button id="cpuBtn" class="menu-btn primary" type="button">⚡ 1 GIOCATORE<small>contro CPU</small></button>
-            <button id="twoBtn" class="menu-btn" type="button">🌪️ 2 GIOCATORI<small>stesso dispositivo</small></button>
-          </div>
-          <div class="difficulty">
+    <div id="menuOverlay" class="overlay show">
+      <div class="dialog menu-dialog">
+        <p class="dialog-kicker">SCEGLI MODALITÀ</p>
+        <h2>ENTRA NELLA TEMPESTA</h2>
+        <div class="menu-grid">
+          <button id="cpuModeBtn" class="menu-btn lightning-btn" type="button">
+            <b>⚡ 1 GIOCATORE</b>
+            <small>Lightning contro CPU</small>
+          </button>
+          <button id="localModeBtn" class="menu-btn" type="button">
+            <b>👥 2 GIOCATORI</b>
+            <small>Stesso dispositivo</small>
+          </button>
+          <button id="onlineModeBtn" class="menu-btn online-btn" type="button">
+            <b>🌐 2 TELEFONI ONLINE</b>
+            <small>Cloudflare WebSocket</small>
+          </button>
+        </div>
+        <div class="difficulty">
+          <span>Difficoltà CPU</span>
+          <div>
             <button data-difficulty="easy" type="button">Facile</button>
             <button data-difficulty="normal" class="active" type="button">Media</button>
             <button data-difficulty="hard" type="button">Difficile</button>
           </div>
-          <div class="audio-row">
-            <button id="musicBtn" class="toggle active" type="button">🎵 MUSICA</button>
-            <button id="sfxBtn" class="toggle active" type="button">🔊 EFFETTI</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="onlineOverlay" class="overlay">
+      <div class="dialog online-dialog">
+        <button id="onlineBackBtn" class="dialog-back" type="button">← MENU</button>
+        <p class="dialog-kicker">MULTIPLAYER CLOUDFLARE</p>
+        <h2>DUE TELEFONI, UNA STANZA</h2>
+
+        <div id="onlineSetup">
+          <button id="createRoomBtn" class="menu-btn online-btn" type="button">
+            <b>＋ CREA STANZA</b>
+            <small>Tu sarai il primo giocatore disponibile</small>
+          </button>
+
+          <div class="or-line"><span>OPPURE</span></div>
+
+          <label class="room-label" for="roomCodeInput">CODICE STANZA</label>
+          <div class="room-entry">
+            <input id="roomCodeInput" maxlength="6" autocomplete="off" inputmode="text" placeholder="ABC123">
+            <button id="joinRoomBtn" type="button">ENTRA</button>
           </div>
-          <div class="wins">⚡ <b id="leftWins">0</b> vittorie &nbsp;·&nbsp; 🌪️ <b id="rightWins">0</b> vittorie</div>
+          <p id="onlineConfigHint" class="hint"></p>
+        </div>
+
+        <div id="onlineLobby" class="online-lobby hidden">
+          <span class="room-caption">STANZA</span>
+          <strong id="roomCodeDisplay" class="room-code">------</strong>
+          <button id="shareRoomBtn" class="share-btn" type="button">CONDIVIDI CODICE</button>
+
+          <div class="players-status">
+            <div>
+              <span>⚡ LIGHTNING</span>
+              <b id="lightningStatus">IN ATTESA</b>
+            </div>
+            <div>
+              <span>🌪 WIND</span>
+              <b id="windStatus">IN ATTESA</b>
+            </div>
+          </div>
+
+          <p id="roleMessage" class="role-message">Connessione...</p>
+          <p id="lobbyMessage" class="hint">In attesa del secondo telefono.</p>
+          <button id="leaveRoomBtn" class="leave-btn" type="button">ESCI DALLA STANZA</button>
         </div>
       </div>
+    </div>
 
-      <div id="pauseOverlay" class="overlay">
-        <div class="panel compact">
-          <div class="panel-kicker">MATCH IN PAUSA</div>
-          <h2>PAUSA</h2>
-          <button id="resumeBtn" class="menu-btn primary" type="button">▶ RIPRENDI</button>
-          <button id="restartBtn" class="menu-btn" type="button">↻ RICOMINCIA</button>
-          <button id="menuBtnPause" class="menu-btn" type="button">☰ MENU</button>
-        </div>
+    <div id="pauseOverlay" class="overlay">
+      <div class="dialog compact">
+        <p class="dialog-kicker">MATCH SOSPESO</p>
+        <h2>PAUSA</h2>
+        <button id="resumeBtn" class="menu-btn lightning-btn" type="button"><b>RIPRENDI</b></button>
+        <button id="restartBtn" class="menu-btn" type="button"><b>RICOMINCIA</b></button>
+        <button id="pauseMenuBtn" class="menu-btn" type="button"><b>MENU</b></button>
       </div>
+    </div>
 
-      <div id="gameOverOverlay" class="overlay">
-        <div class="panel compact">
-          <div class="panel-kicker">DUELLO CONCLUSO</div>
-          <h2 id="winnerText">LIGHTNING VINCE!</h2>
-          <div id="finalScore" class="final-score">10 - 8</div>
-          <button id="rematchBtn" class="menu-btn primary" type="button">⚡ RIVINCITA</button>
-          <button id="menuBtn" class="menu-btn" type="button">☰ MENU</button>
-        </div>
+    <div id="gameOverOverlay" class="overlay">
+      <div class="dialog compact">
+        <p class="dialog-kicker">DUELLO CONCLUSO</p>
+        <h2 id="winnerText">LIGHTNING VINCE!</h2>
+        <p id="finalScoreText" class="final-score">10 — 8</p>
+        <button id="rematchBtn" class="menu-btn lightning-btn" type="button"><b>RIVINCITA</b></button>
+        <button id="gameOverMenuBtn" class="menu-btn" type="button"><b>MENU</b></button>
       </div>
-    </section>
+    </div>
 
-    <section class="mobile-controls" aria-label="Controlli racchetta Lightning">
-      <button id="downBtn" class="move-btn down-btn" type="button" aria-label="Muovi racchetta in basso">
-        <span class="arrow">↓</span><span class="move-label">GIÙ</span>
-      </button>
-      <button id="upBtn" class="move-btn up-btn" type="button" aria-label="Muovi racchetta in alto">
-        <span class="arrow">↑</span><span class="move-label">SU</span>
-      </button>
-    </section>
-  </main>
-  <script src="script.js"></script>
+    <div id="countdown" class="countdown hidden">3</div>
+    <div id="impactFlash" class="impact-flash"></div>
+  </section>
+
+  <section class="mobile-controls" aria-label="Controlli racchetta">
+    <button id="downBtn" class="move-btn down-btn" type="button">
+      <span>↓</span><b>GIÙ</b>
+    </button>
+    <button id="upBtn" class="move-btn up-btn" type="button">
+      <span>↑</span><b>SU</b>
+    </button>
+  </section>
+
+  <footer class="game-footer">
+    <span id="roleBadge">MODALITÀ LOCALE</span>
+    <span>W/S · ↑/↓ · P pausa</span>
+  </footer>
+</main>
+
+<script src="multiplayer-config.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
