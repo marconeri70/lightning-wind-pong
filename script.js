@@ -69,9 +69,20 @@
   let manualDisconnect = false;
   let reconnectTimer = null;
   let shareUrl = "";
+  // Ultimo stato autorevole ricevuto da Cloudflare.
+  // Il rendering non salta più direttamente da un pacchetto al successivo:
+  // tra due pacchetti il client predice/interpola a 60 fps.
   const remote = {
-    leftY: left.y, rightY: right.y,
-    ballX: ball.x, ballY: ball.y, ballVx: 0, ballVy: 0,
+    leftY: left.y,
+    rightY: right.y,
+    leftVy: 0,
+    rightVy: 0,
+    ballX: ball.x,
+    ballY: ball.y,
+    ballVx: 0,
+    ballVy: 0,
+    receivedAt: performance.now(),
+    lastServerTime: 0,
     hasState: false
   };
 
@@ -302,15 +313,52 @@
     rightScore = Number(onlineState.score?.wind || 0);
     updateScore();
 
+    // Timestamp del pacchetto: preferiamo quello del server; se il Worker
+    // non è ancora aggiornato usiamo comunque il tempo di ricezione locale.
+    const recvNow = performance.now();
+    const serverNow = Number(msg.serverTime || Date.now());
+    const sampleDt = remote.hasState
+      ? clamp(
+          remote.lastServerTime > 0
+            ? (serverNow - remote.lastServerTime) / 1000
+            : (recvNow - remote.receivedAt) / 1000,
+          0.008,
+          0.12
+        )
+      : 0;
+
     if (onlineState.paddles) {
-      remote.leftY = Number(onlineState.paddles.lightningY ?? remote.leftY);
-      remote.rightY = Number(onlineState.paddles.windY ?? remote.rightY);
+      const nextLeftY = Number(onlineState.paddles.lightningY ?? remote.leftY);
+      const nextRightY = Number(onlineState.paddles.windY ?? remote.rightY);
+
+      if (sampleDt > 0) {
+        remote.leftVy = clamp((nextLeftY - remote.leftY) / sampleDt, -left.speed * 1.15, left.speed * 1.15);
+        remote.rightVy = clamp((nextRightY - remote.rightY) / sampleDt, -right.speed * 1.15, right.speed * 1.15);
+      }
+
+      remote.leftY = nextLeftY;
+      remote.rightY = nextRightY;
     }
+
     if (onlineState.ball) {
       remote.ballX = Number(onlineState.ball.x ?? remote.ballX);
       remote.ballY = Number(onlineState.ball.y ?? remote.ballY);
       remote.ballVx = Number(onlineState.ball.vx || 0);
       remote.ballVy = Number(onlineState.ball.vy || 0);
+    }
+
+    remote.receivedAt = recvNow;
+    remote.lastServerTime = serverNow;
+
+    // Al primo pacchetto facciamo uno snap iniziale. Da quel momento in poi
+    // il rendering usa predizione + correzione morbida.
+    if (!remote.hasState && onlineState.ball) {
+      left.y = remote.leftY;
+      right.y = remote.rightY;
+      ball.x = remote.ballX;
+      ball.y = remote.ballY;
+      ball.vx = remote.ballVx;
+      ball.vy = remote.ballVy;
       remote.hasState = true;
     }
 
@@ -364,19 +412,90 @@
     clearTimeout(reconnectTimer); reconnectTimer = null;
     if (ws) { try { ws.close(1000, "leave"); } catch {} ws = null; }
     onlineRole = null; onlineState = null; onlinePlayers = { lightning: false, wind: false }; onlineInput = 0;
+    remote.hasState = false;
+    remote.leftVy = remote.rightVy = 0;
+    remote.ballVx = remote.ballVy = 0;
   }
+  function predictedBallTarget(age) {
+    let x = remote.ballX + remote.ballVx * age;
+    let y = remote.ballY + remote.ballVy * age;
+
+    // Durante la breve estrapolazione simuliamo anche il rimbalzo sui bordi
+    // superiore/inferiore, così la pallina non "entra" nel muro tra due pacchetti.
+    const top = 30;
+    const bottom = H - 30;
+    let guard = 0;
+    while ((y < top || y > bottom) && guard++ < 4) {
+      if (y < top) y = top + (top - y);
+      if (y > bottom) y = bottom - (y - bottom);
+    }
+    return { x, y };
+  }
+
   function updateOnlineVisuals(dt) {
     if (!remote.hasState) return;
-    // Interpolazione: riduce gli scatti fra i pacchetti server (~30 Hz).
-    const paddleLerp = Math.min(1, 18 * dt);
-    const ballLerp = Math.min(1, 22 * dt);
-    left.y += (remote.leftY - left.y) * paddleLerp;
-    right.y += (remote.rightY - right.y) * paddleLerp;
-    trail.unshift({ x: ball.x, y: ball.y, side: remote.ballVx >= 0 ? "wind" : "lightning" });
-    if (trail.length > 18) trail.pop();
-    ball.x += (remote.ballX - ball.x) * ballLerp;
-    ball.y += (remote.ballY - ball.y) * ballLerp;
-    ball.vx = remote.ballVx; ball.vy = remote.ballVy;
+
+    const isPaused = !!onlineState?.paused;
+    const isCountdown = onlineState?.status === "countdown";
+    const age = (isPaused || isCountdown)
+      ? 0
+      : clamp((performance.now() - remote.receivedAt) / 1000, 0, 0.085);
+
+    const targetLeft = clamp(remote.leftY + remote.leftVy * age, 18, H - left.h - 18);
+    const targetRight = clamp(remote.rightY + remote.rightVy * age, 18, H - right.h - 18);
+
+    // PREDIZIONE LOCALE DELLA PROPRIA RACCHETTA:
+    // la racchetta reagisce subito al dito, senza aspettare il viaggio
+    // telefono -> Cloudflare -> telefono.
+    const ownDir = buttonDirection;
+    if (!isPaused && onlineRole === "lightning") {
+      left.y = clamp(left.y + ownDir * left.speed * dt, 18, H - left.h - 18);
+      // correzione dolce verso lo stato autorevole del server
+      left.y += (targetLeft - left.y) * (1 - Math.exp(-5.5 * dt));
+    } else {
+      left.y += (targetLeft - left.y) * (1 - Math.exp(-18 * dt));
+    }
+
+    if (!isPaused && onlineRole === "wind") {
+      right.y = clamp(right.y + ownDir * right.speed * dt, 18, H - right.h - 18);
+      right.y += (targetRight - right.y) * (1 - Math.exp(-5.5 * dt));
+    } else {
+      right.y += (targetRight - right.y) * (1 - Math.exp(-18 * dt));
+    }
+
+    // PALLINA A 60 FPS:
+    // continuiamo il moto usando l'ultima velocità ricevuta e poi
+    // riconciliamo gradualmente con la posizione server prevista.
+    if (!isPaused && !isCountdown) {
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+
+      if (ball.y < 30 && ball.vy < 0) {
+        ball.y = 30 + (30 - ball.y);
+        ball.vy *= -1;
+      } else if (ball.y > H - 30 && ball.vy > 0) {
+        ball.y = (H - 30) - (ball.y - (H - 30));
+        ball.vy *= -1;
+      }
+    }
+
+    const targetBall = predictedBallTarget(age);
+    const ballCorrection = 1 - Math.exp(-13 * dt);
+    ball.x += (targetBall.x - ball.x) * ballCorrection;
+    ball.y += (targetBall.y - ball.y) * ballCorrection;
+
+    // La velocità server resta la sorgente autorevole, ma viene aggiornata
+    // senza bloccare il rendering tra un pacchetto e l'altro.
+    if (!isPaused && !isCountdown) {
+      ball.vx += (remote.ballVx - ball.vx) * (1 - Math.exp(-20 * dt));
+      ball.vy += (remote.ballVy - ball.vy) * (1 - Math.exp(-20 * dt));
+    } else {
+      ball.vx = remote.ballVx;
+      ball.vy = remote.ballVy;
+    }
+
+    trail.unshift({ x: ball.x, y: ball.y, side: ball.vx >= 0 ? "wind" : "lightning" });
+    if (trail.length > 22) trail.pop();
   }
 
   // Drawing

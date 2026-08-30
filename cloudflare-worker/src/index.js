@@ -11,7 +11,7 @@ const PADDLE_SPEED = 620;
 const BALL_RADIUS = 11;
 const START_SPEED = 470;
 const MAX_SPEED = 1080;
-const TICK_MS = 33;
+const TICK_MS = 20; // 50 Hz server simulation / snapshots
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
@@ -222,7 +222,7 @@ export class GameRoom extends DurableObject {
   }
 
   broadcastState() {
-    this.sendAll({ type: "state", state: this.game });
+    this.sendAll({ type: "state", serverTime: Date.now(), state: this.game });
   }
 
   async persist() {
@@ -282,7 +282,7 @@ export class GameRoom extends DurableObject {
       if (this.playerCount() < 2) return;
 
       const now = Date.now();
-      let dt = Math.min((now - this.lastTick) / 1000, 0.05);
+      let dt = Math.min((now - this.lastTick) / 1000, 0.04);
       this.lastTick = now;
 
       if (this.game.status === "countdown") {
@@ -344,7 +344,7 @@ export class GameRoom extends DurableObject {
         }
       }
 
-      if (Math.random() < 0.08) this.persist();
+      if (Math.random() < 0.02) this.persist();
       this.broadcastState();
     } catch (err) {
       console.error("tick error", err);
